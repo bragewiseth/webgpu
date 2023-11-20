@@ -96,8 +96,8 @@ ax.set_xlim([-3, 3])
 ax.set_ylim([-3, 3])
 ax.set_zlim([-3, 3])
 # Initialize cube plot
-cube_lines = [ax.plot([], [], [], c='teal')[0] for _ in range(len(cube_edges))]
-# cube_lines = [ax.plot([], [], c='r')[0] for _ in range(len(cube_edges))]
+# cube_lines = [ax.plot([], [], [], c='teal')[0] for _ in range(len(cube_edges))]
+cube_lines = [ax.plot([], [], c='r')[0] for _ in range(len(cube_edges))]
 
 # Animation update function
 def update(frame):
@@ -108,12 +108,12 @@ def update(frame):
     rotation = np.dot(rotationx, rotationy)
     modelview = translation @ rotation
     new_vertices = np.dot(cube_vertices, modelview.T)
-    new_vertices = np.dot(new_vertices, perspective.T)
+    # new_vertices = np.dot(new_vertices, perspective.T)
     new_vertices /= new_vertices[:, 3].reshape(-1, 1)  # Divide by w to normalize
     for edge, line in zip(cube_edges, cube_lines):
         line.set_data(new_vertices[edge, 0:2].T) # x and y
-        # line.set_3d_properties(new_vertices[edge, 2].T) # z
-        line.set_3d_properties(np.zeros(2)) # z
+        line.set_3d_properties(new_vertices[edge, 2].T) # z
+        # line.set_3d_properties(np.zeros(2)) # z
 
 # Create animation
 ani = FuncAnimation(fig, update, frames=np.arange(0, 360, 2), interval=50)

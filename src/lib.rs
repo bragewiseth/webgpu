@@ -1,4 +1,14 @@
 
+mod state;
+// use winit::window::Window;
+
+
+
+// lib.rs
+
+
+
+
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -12,8 +22,13 @@ use winit::
 
 
 
+
+
+
+
+
 #[cfg_attr(target_arch="wasm32", wasm_bindgen(start))]
-pub fn run()
+pub async fn run()
 {
 
     cfg_if::cfg_if! 
@@ -23,10 +38,7 @@ pub fn run()
             std::panic::set_hook(Box::new(console_error_panic_hook::hook));
             console_log::init_with_level(log::Level::Warn).expect("Couldn't initialize logger");
         } 
-        else 
-        {
-            env_logger::init();
-        }
+        else { env_logger::init(); }
     }
 
     let event_loop = EventLoop::new();
@@ -49,35 +61,67 @@ pub fn run()
                 let canvas = web_sys::Element::from(window.canvas());
                 dst.append_child(&canvas).ok()?;
                 Some(())
-            })
-            .expect("Couldn't append canvas to document body.");
+            }).expect("Couldn't append canvas to document body.");
     }
 
+    // Window setup...
 
-    event_loop.run(move |event, _, control_flow| match event 
+    let mut state = state::State::new(window).await;
+
+    // Event loop...
+
+    event_loop.run(
+        move |event, _, control_flow| 
+        match event 
         {
             Event::WindowEvent 
             {
                 ref event,
                 window_id,
             } 
-            if window_id == window.id() => match event 
+            if window_id == state.window().id() => if !state.input(event)
             {
-                WindowEvent::CloseRequested | WindowEvent::KeyboardInput 
+                match event 
                 {
-                    input:
-                    KeyboardInput 
+                    WindowEvent::CloseRequested | 
+                    WindowEvent::KeyboardInput 
                     {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        input : KeyboardInput 
+                        {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
                         ..
-                    },
-                    ..
                     } => *control_flow = ControlFlow::Exit, 
+
+                    WindowEvent::Resized(physical_size) =>  state.resize(*physical_size),
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } =>  state.resize(**new_inner_size),
                     _ => {}
-            },
+                }
+            } 
+            Event::RedrawRequested(window_id) if window_id == state.window().id() => 
+            {
+                state.update();
+                match state.render() 
+                {
+                    Ok(_) => {}
+                    // Reconfigure the surface if lost
+                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    // The system is out of memory, we should probably quit
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    // All other errors (Outdated, Timeout) should be resolved by the next frame
+                    Err(e) => eprintln!("{:?}", e),
+                }
+            }
+            Event::MainEventsCleared => 
+            {
+                // RedrawRequested will only trigger once, unless we manually
+                // request it.
+                state.window().request_redraw();
+            }
             _ => {}
-        });
+        }
+
+    );
 }
-
-
