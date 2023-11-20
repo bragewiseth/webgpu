@@ -79,7 +79,7 @@ pub async fn run()
                 ref event,
                 window_id,
             } 
-            if window_id == state.window().id() => if !state.input(event)
+            if window_id == state.window().id() => if !state.window_input(event)
             {
                 match event 
                 {
@@ -100,6 +100,10 @@ pub async fn run()
                     _ => {}
                 }
             } 
+            Event::DeviceEvent { ref event, .. } => 
+            {
+                state.device_input(event);
+            }
             Event::RedrawRequested(window_id) if window_id == state.window().id() => 
             {
                 state.update();

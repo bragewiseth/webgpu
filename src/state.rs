@@ -62,12 +62,11 @@ pub struct State
     window: Window,
     
     render_pipeline : wgpu::RenderPipeline,
-    inactive_pipeline : wgpu::RenderPipeline,
 
     vertex_buffer: wgpu::Buffer,
     num_vertices: u32,
     // temp field color
-    // pub color: wgpu::Color,
+    pub color: wgpu::Color,
 }
 
 
@@ -85,10 +84,6 @@ impl State
 
 
 
-    fn toggle_pipeline(&mut self) 
-    {
-        std::mem::swap(&mut self.render_pipeline, &mut self.inactive_pipeline);
-    }
 
 
 
@@ -244,58 +239,6 @@ impl State
             }
         );
 
-       let pipeline2 = device.create_render_pipeline(
-            &wgpu::RenderPipelineDescriptor 
-            {
-                label: Some("Render Pipeline"),
-                layout: Some(&render_pipeline_layout),
-                vertex: wgpu::VertexState 
-                {
-                    module: &shader,
-                    entry_point: "vs_main", // 1.
-                    buffers: &[Vertex::desc(),], // 2.
-                },
-                fragment: Some(
-                    wgpu::FragmentState 
-                    { // 3.
-                        module: &shader,
-                        entry_point: "fs_main2",
-                        targets: &[Some(
-                            wgpu::ColorTargetState 
-                            { // 4.
-                                format: config.format,
-                                blend: Some(wgpu::BlendState::REPLACE),
-                                write_mask: wgpu::ColorWrites::ALL,
-                            }
-                        )],
-                    }
-                ),
-
-                primitive: wgpu::PrimitiveState 
-                {
-                    topology: wgpu::PrimitiveTopology::TriangleList, // 1.
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw, // 2.
-                    cull_mode: Some(wgpu::Face::Back),
-                    // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    // Requires Features::DEPTH_CLIP_CONTROL
-                    unclipped_depth: false,
-                    // Requires Features::CONSERVATIVE_RASTERIZATION
-                    conservative: false,
-                },
-
-                depth_stencil: None, // 1.
-                multisample: wgpu::MultisampleState 
-                {
-                    count: 1, // 2.
-                    mask: !0, // 3.
-                    alpha_to_coverage_enabled: false, // 4.
-                },
-                multiview: None, // 5.
-            }
-        );
-
 
 
         let vertex_buffer = device.create_buffer_init(
@@ -315,9 +258,9 @@ impl State
             config,
             size,
             render_pipeline : pipeline1,
-            inactive_pipeline : pipeline2,
             vertex_buffer,
             num_vertices,
+            color: wgpu::Color::BLACK,
         }
     }
 
@@ -342,14 +285,22 @@ impl State
 
 
 // impl State
-    pub fn input(&mut self, event: &WindowEvent) -> bool
+    pub fn window_input(&mut self, event: &WindowEvent) -> bool
     {
         match event 
         {
-            // WindowEvent::CursorMoved { position,.. } => 
-            // {
-            //     true
-            // },
+            WindowEvent::Touch(..) =>
+            {
+                // toggle pipeline
+                self.color = wgpu::Color 
+                {
+                    r: 0.1,
+                    g: 0.1,
+                    b: 1.0,
+                    a: 1.0,
+                };
+                true
+            },
             WindowEvent::KeyboardInput 
             {
                 input : KeyboardInput 
@@ -362,12 +313,43 @@ impl State
             } => 
             {
                 // toggle pipeline
-                self.toggle_pipeline();
+                self.color = wgpu::Color 
+                {
+                    r: 0.1,
+                    g: 0.1,
+                    b: 0.1,
+                    a: 1.0,
+                };
                 true
             },
             _ => false,
         }
     }
+
+
+
+    pub fn device_input(&mut self, event : &DeviceEvent) -> bool
+    {
+        match event 
+        {
+            DeviceEvent::MouseMotion { .. } =>
+            {
+                // toggle pipeline
+                self.color = wgpu::Color 
+                {
+                    r: 0.1,
+                    g: 0.1,
+                    b: 1.0,
+                    a: 1.0,
+                };
+                true
+            },
+            _ => false,
+        }
+    }
+
+
+
 
 
 
@@ -406,9 +388,9 @@ impl State
                                 load: wgpu::LoadOp::Clear(
                                     wgpu::Color 
                                     {
-                                        r: 0.1,
-                                        g: 0.1,
-                                        b: 0.1,
+                                        r: self.color.r as f64,
+                                        g: self.color.g as f64,
+                                        b: self.color.b as f64,
                                         a: 1.0,
                                     }   
                                     // self.color
