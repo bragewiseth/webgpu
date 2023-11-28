@@ -53,7 +53,7 @@ fn vs_main( model: VertexInput, instance: InstanceInput) -> VertexOutput {
     var out: VertexOutput;
     out.color = model.color;
     out.tex_coords = model.tex_coords;
-    out.clip_position =  camera.view_proj * model_matrix *  vec4<f32>(model.position, 1.0);
+    out.clip_position =   camera.view_proj *  vec4<f32>(model.position, 1.0);
     return out;
 }
 
@@ -72,13 +72,3 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(in.color, 1.0);
     //return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }
-
-
-
-
-
-
-
-
-
-

@@ -46,14 +46,23 @@ impl Camera {
         let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
         let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
 
+        // Matrix4::look_to_rh(
+        //     self.position,
+        //     Vector3::new(
+        //         cos_pitch * cos_yaw,
+        //         sin_pitch,
+        //         cos_pitch * sin_yaw
+        //     ).normalize(),
+        //     Vector3::unit_y(),
+        // )
         Matrix4::look_to_rh(
             self.position,
             Vector3::new(
+                cos_pitch * sin_yaw,
                 cos_pitch * cos_yaw,
                 sin_pitch,
-                cos_pitch * sin_yaw
             ).normalize(),
-            Vector3::unit_y(),
+            Vector3::unit_z(),
         )
     }
 }
@@ -177,8 +186,8 @@ impl CameraController {
 
         // Move forward/backward and left/right
         let (yaw_sin, yaw_cos) = camera.yaw.0.sin_cos();
-        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+        let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
+        let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
         camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
         camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
 
@@ -187,13 +196,13 @@ impl CameraController {
         // changes when zooming. I've added this to make it easier
         // to get closer to an object you want to focus on.
         let (pitch_sin, pitch_cos) = camera.pitch.0.sin_cos();
-        let scrollward = Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
+        let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
         camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
 
         // Move up/down. Since we don't use roll, we can just
         // modify the y coordinate directly.
-        camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
+        camera.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
 
         // Rotate
         camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;

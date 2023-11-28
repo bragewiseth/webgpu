@@ -19,6 +19,7 @@ use winit::
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
+    window::CursorGrabMode,
 };
 
 
@@ -44,6 +45,7 @@ pub async fn run()
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
+    window.set_inner_size(winit::dpi::LogicalSize::new(1000, 750));
 
 
     #[cfg(target_arch = "wasm32")]

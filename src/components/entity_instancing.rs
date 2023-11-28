@@ -61,3 +61,10 @@ impl InstanceRaw {
         }
     }
 }
+
+
+pub struct Instances
+{
+    pub instances: Vec<Instance>,
+    pub instance_buffer: wgpu::Buffer,
+}

@@ -1,8 +1,9 @@
-
+use crate::components::texture;
 // model.rs
 pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
+
 
 
 #[repr(C)]
@@ -52,67 +53,32 @@ impl Vertex for ModelVertex {
 }
  
 
- 
 
 
 
+pub struct Material 
+{
+    // pub name: String,
+    pub diffuse_texture: texture::Texture,
+    pub diffuse_color: [f32; 4],
+    pub bind_group: wgpu::BindGroup,
+}
 
 
-
-// cube
-pub const VERTICES: &[ModelVertex] = &[
-
-    ModelVertex { position: [ 0.5,  0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, -1.0], color: [1.0, 0.0, 0.0] },
-    ModelVertex { position: [-0.5,  0.5, -0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, -1.0], color: [1.0, 1.0, 0.0] },
-    ModelVertex { position: [-0.5, -0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, -1.0], color: [1.0, 1.0, 0.0] },
-    ModelVertex { position: [ 0.5, -0.5, -0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, -1.0], color: [1.0, 0.0, 0.0] },
-    ModelVertex { position: [ 0.5, -0.5,  0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 1.0], color: [1.0, 0.0, 0.0] },
-    ModelVertex { position: [ 0.5,  0.5,  0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 1.0], color: [1.0, 1.0, 0.0] },
-    ModelVertex { position: [-0.5,  0.5,  0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 1.0], color: [1.0, 1.0, 0.0] },
-    ModelVertex { position: [-0.5, -0.5,  0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 1.0], color: [1.0, 0.0, 0.0] },
-
-];
-
-// wire cube
-// pub const INDICES: &[u16] = &[
-//     // front face
-//     0, 1, 1, 2, 2, 3, 3, 0,
-//     
-//     // back face
-//     4, 5, 5, 6, 6, 7, 7, 4,
-//
-//     // edges connecting front and back faces
-//     0, 5, 1, 6, 2, 7, 3, 4,
-// ];
+pub struct Mesh 
+{
+    // pub name: String,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_elements: u32,
+    pub material: usize,
+}
 
 
-// triangle cube
-pub const INDICES: &[u16] = &[
-    // front face
-    2, 1, 0, 0, 3, 2,
-    
-    // back face
-    4, 5, 6, 6, 7, 4,
-
-    // right face
-    3, 0, 5, 5, 4, 3,
-
-    // left face
-    6, 1, 2, 2, 7, 6,
-
-    // top face
-    0, 1, 6, 6, 5, 0,
-
-    // bottom face
-    2, 3, 4, 4, 7, 2,
-
-    
-];
-
-
-
-
-
- 
-
- 
+pub struct Model 
+{
+    pub meshes: Vec<Mesh>,
+    pub materials: Vec<Material>,
+    pub model_matrix: cgmath::Matrix4<f32>,
+    pub bind_group: wgpu::BindGroup
+}

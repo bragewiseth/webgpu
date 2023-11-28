@@ -1,6 +1,6 @@
 pub mod camera;
 pub mod entity;
-pub mod instance;
+pub mod entity_instancing;
 pub mod material;
 pub mod mesh;
 pub mod model;
