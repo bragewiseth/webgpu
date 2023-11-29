@@ -7,10 +7,10 @@ use wgpu::util::DeviceExt;
 
 
 pub const VERTICES: &[ModelVertex] = &[
-    ModelVertex { position: [ 1.0,  1.0,  0.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.6, 0.4] },
-    ModelVertex { position: [-1.0,  1.0,  0.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.5, 0.4] },
-    ModelVertex { position: [-1.0, -1.0,  0.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.5, 0.4] },
-    ModelVertex { position: [ 1.0, -1.0,  0.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.6, 0.4] },
+    ModelVertex { position: [ 1.0,  1.0,  0.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 1.0]},// color: [0.6, 0.6, 0.4] },
+    ModelVertex { position: [-1.0,  1.0,  0.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 1.0]},// color: [0.6, 0.5, 0.4] },
+    ModelVertex { position: [-1.0, -1.0,  0.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 1.0]},// color: [0.6, 0.5, 0.4] },
+    ModelVertex { position: [ 1.0, -1.0,  0.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 1.0]},// color: [0.6, 0.6, 0.4] },
 
 ];
 

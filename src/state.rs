@@ -1,5 +1,8 @@
 // use crate::components::world::World;
 use crate::components::texture;
+use crate::components::model::Model;
+use crate::components::entity_instancing::Instance;
+use crate::resources;
 use crate::components::mesh::Mesh;
 use crate::components::world::World;
 use winit::window::Window;
@@ -7,7 +10,7 @@ use winit:: event::*;
 use winit::window::CursorGrabMode;
 use crate::instances::world;
 use crate::instances::pipeline;
-
+use cgmath::prelude::*;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
@@ -43,6 +46,8 @@ pub struct State
     mouse_locked: bool,
     world : World,
     screen_quad: Mesh,
+    obj_model: Model,
+    instances: Vec<Instance>,
 }
 
 
@@ -62,7 +67,7 @@ impl State
                 ..Default::default()
             }
         );
-        
+       
         // # Safety
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
@@ -113,6 +118,8 @@ impl State
             view_formats: vec![],
         };
         surface.configure(&device, &config);
+        
+
 
 
 
@@ -132,6 +139,30 @@ impl State
         let render_pipeline = pipeline::make_pipeline(&device, &config, &shader, &bind_group_layouts);
         let depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture");
 
+        let obj_model =
+            resources::load_model("shpere.obj", &device, &queue, &world.entities[0].material.texture_bind_group_layout)
+                .await
+                .unwrap();
+
+        const SPACE_BETWEEN: f32 = 3.0;
+        let instances = (0..1).flat_map(|z| {
+            (0..1).map(move |x| {
+                let x = 2.0 * (x as f32 - 1.0 as f32 / 2.0);
+                let z = 2.0 * (z as f32 - 1.0 as f32 / 2.0);
+
+                let position = cgmath::Vector3 { x, y: 0.0, z };
+
+                let rotation = if position.is_zero() {
+                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                } else {
+                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                };
+
+                Instance {
+                    position, rotation,
+                }
+            })
+        }).collect::<Vec<_>>();
 
 
         Self
@@ -147,18 +178,12 @@ impl State
             mouse_locked: false,
             world,
             screen_quad,
+            obj_model,
+            instances
         }
+
+
     }
-
-
-
-
-
-
-
-
-
-
 
 
     pub fn window(&self) -> &Window
@@ -249,10 +274,6 @@ impl State
             _ => false,
         }
     }
-
-
-
-
 
 
 
@@ -401,10 +422,8 @@ impl State
             render_pass.set_pipeline(&self.render_pipeline[1]);
             render_pass.set_bind_group(0, &self.world.entities[0].material.diffuse_bind_group, &[]); // NEW!
             render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.world.entities[0].mesh.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.world.entities[0].instances.as_ref().unwrap().instance_buffer.slice(..));
-            render_pass.set_index_buffer(self.world.entities[0].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.world.entities[0].mesh.num_indices, 0, 0..3 as _);
+            use crate::components::model::DrawModel;
+            render_pass.draw_mesh_instanced(&self.obj_model.meshes[0], &self.obj_model.materials[0], 0..1, &self.world.camera.camera_bind_group);
         }  
         {
             let mut render_pass = encoder.begin_render_pass(

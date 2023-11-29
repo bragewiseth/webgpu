@@ -22,7 +22,7 @@ struct VertexInput
     @location(0) position: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
     @location(2) normal: vec3<f32>,
-    @location(3) color: vec3<f32>,
+    //@location(3) color: vec3<f32>,
 }
 
 struct InstanceInput 
@@ -54,7 +54,7 @@ fn vs_main( model: VertexInput, instance: InstanceInput) -> VertexOutput {
 
 
     var out: VertexOutput;
-    out.color = model.color;
+    //out.color = model.color;
     out.tex_coords = model.tex_coords;
     out.clip_position =  camera.view_proj * model_matrix *  vec4<f32>(model.position, 1.0);
     return out;

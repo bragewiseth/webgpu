@@ -7,7 +7,6 @@ use crate::components::entity;
 pub struct World 
 {
     pub entities: Vec<entity::Entity>,
-    // pub camera: camera::Camera,
     pub camera: camera::FPSCamera,
 }
 

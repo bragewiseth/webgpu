@@ -14,7 +14,7 @@ pub struct ModelVertex
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub normal: [f32; 3],
-    pub color: [f32; 3],
+    // pub color: [f32; 3],
 }
 
 
@@ -59,16 +59,16 @@ impl Vertex for ModelVertex {
 
 pub struct Material 
 {
-    // pub name: String,
+    pub name: String,
     pub diffuse_texture: texture::Texture,
-    pub diffuse_color: [f32; 4],
+    // pub diffuse_color: [f32; 4],
     pub bind_group: wgpu::BindGroup,
 }
 
 
 pub struct Mesh 
 {
-    // pub name: String,
+    pub name: String,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
@@ -80,8 +80,8 @@ pub struct Model
 {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
-    pub model_matrix: cgmath::Matrix4<f32>,
-    pub bind_group: wgpu::BindGroup
+    // pub model_matrix: cgmath::Matrix4<f32>,
+    // pub bind_group: wgpu::BindGroup
 }
 
 

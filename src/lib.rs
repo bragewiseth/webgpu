@@ -1,6 +1,7 @@
 pub mod state;
 pub mod components;
 pub mod instances;
+pub mod resources;
 // mod shaders;
 // use winit::window::Window;
 
