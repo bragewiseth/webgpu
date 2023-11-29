@@ -1,7 +1,5 @@
-pub mod state;
-pub mod components;
-pub mod instances;
-pub mod resources;
+pub mod app;
+pub mod core;
 // mod shaders;
 // use winit::window::Window;
 
@@ -22,6 +20,8 @@ use winit::
     window::WindowBuilder,
     window::CursorGrabMode,
 };
+
+use crate::app::renderer;
 
 
 
@@ -71,7 +71,7 @@ pub async fn run()
 
     // Window setup...
 
-    let mut state = state::State::new(window).await;
+    let mut state = renderer::Renderer::new(window).await;
     let mut last_render_time = instant::Instant::now();  // NEW!
     // Event loop...
 

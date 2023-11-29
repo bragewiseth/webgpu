@@ -1,15 +1,10 @@
-// use crate::components::world::World;
-use crate::components::texture;
-use crate::components::model::Model;
-use crate::components::entity_instancing::Instance;
-use crate::resources;
-use crate::components::mesh::Mesh;
-use crate::components::world::World;
+use crate::core::texture;
+use crate::app::world;
+
+
 use winit::window::Window;
 use winit:: event::*;
 use winit::window::CursorGrabMode;
-use crate::instances::world;
-use crate::instances::pipeline;
 use cgmath::prelude::*;
 
 #[repr(C)]
@@ -29,11 +24,20 @@ pub enum CompareFunction {
 
 
 
+struct FrameBuffer
+{
+    framebuffers: Vec<wgpu::TextureView>,
+    depth_view: wgpu::TextureView,
+    
+}
+
+
+
 // cube
 
 
 
-pub struct State
+pub struct Renderer<'a>
 {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -41,17 +45,16 @@ pub struct State
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,// The window must be declared after, the surface contains unsafe references to the window's resources.
     window: Window,
-    render_pipeline : Vec<wgpu::RenderPipeline>,
-    depth_texture: texture::Texture,
-    mouse_locked: bool,
-    world : World,
-    screen_quad: Mesh,
-    obj_model: Model,
-    instances: Vec<Instance>,
+    camera: camera::Camera,
+    render_pipelines : Vec<wgpu::RenderPipeline>,
+    frame_buffers : Vec<FrameBuffer>,
+    passes : Vec<wgpu::RenderPass<'a>>,
+    world : world::World,
+    mouse_locked: bool
 }
 
 
-impl State 
+impl Renderer<'static>
 {
 
     pub async fn new(window: Window) -> Self
@@ -67,7 +70,6 @@ impl State
                 ..Default::default()
             }
         );
-       
         // # Safety
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
@@ -87,14 +89,8 @@ impl State
             {
                 features: wgpu::Features::empty(),
                 limits: 
-                    if cfg!(target_arch = "wasm32") 
-                    {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    }
-                    else
-                    {
-                        wgpu::Limits::default()
-                    },
+                    if cfg!(target_arch = "wasm32") { wgpu::Limits::downlevel_webgl2_defaults() }
+                    else { wgpu::Limits::default() },
                 label: None,
             },
             None, // Trace path
@@ -133,7 +129,6 @@ impl State
             &world.entities[0].material.texture_bind_group_layout,
             &world.camera.camera_bind_group_layout,
         ];
-        let screen_quad = crate::instances::screenquad::new_entity(&device);
         let final_render_pipeline = pipeline::make_pipeline_final(&device, &config, &finalshader, &[&world.entities[0].material.texture_bind_group_layout]);
         let floor_render_pipeline = pipeline::make_pipeline(&device, &config, &floorshader, &bind_group_layouts);
         let render_pipeline = pipeline::make_pipeline(&device, &config, &shader, &bind_group_layouts);
@@ -165,6 +160,53 @@ impl State
         }).collect::<Vec<_>>();
 
 
+
+        let low_res_texture = texture::Texture::create_blank_texture(
+            &self.device, 
+            &self.config.width / 4 , &self.config.height / 4,
+            "low_res_texture", 
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC, wgpu::TextureFormat::Rgba8UnormSrgb);
+        // Create a bind group layout
+        let bind_group_layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+            label: Some("texture_bind_group_layout"),
+        });
+
+        // Create a bind group
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+            label: Some("texture_bind_group"),
+        });
+
+        let frame_buffers = vec![low_res_texture];
+
         Self
         {
             window,
@@ -173,7 +215,7 @@ impl State
             queue,
             config,
             size,
-            render_pipeline : vec![final_render_pipeline, render_pipeline, floor_render_pipeline],
+            render_pipelines : vec![final_render_pipeline, render_pipeline, floor_render_pipeline],
             depth_texture,
             mouse_locked: false,
             world,
@@ -206,7 +248,72 @@ impl State
         }
     }
 
-
+    pub fn make_pipeline(&self, shader: &wgpu::ShaderModule) -> wgpu::RenderPipeline
+    {
+        let render_pipeline_layout = self.device.create_pipeline_layout(
+            &wgpu::PipelineLayoutDescriptor 
+            {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[&self.world.entities[0].material.texture_bind_group_layout, &self.world.camera.camera_bind_group_layout],
+                push_constant_ranges: &[],
+            }
+        );
+        self.device.create_render_pipeline(
+            &wgpu::RenderPipelineDescriptor 
+            {
+                label: Some("Render Pipeline"),
+                layout: Some(&render_pipeline_layout),
+                vertex: wgpu::VertexState 
+                {
+                    module: shader,
+                    entry_point: "main",
+                    buffers: &[
+                        wgpu::VertexBufferLayout 
+                        {
+                            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                            step_mode: wgpu::InputStepMode::Vertex,
+                            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
+                        }
+                    ],
+                },
+                fragment: Some(wgpu::FragmentState 
+                {
+                    module: shader,
+                    entry_point: "main",
+                    targets: &[wgpu::ColorTargetState 
+                    {
+                        format: self.config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }],
+                }),
+                primitive: wgpu::PrimitiveState 
+                {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    clamp_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState 
+                {
+                    format: texture::Texture::DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState 
+                {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+            }
+        )
+    }
 
 // impl State
     pub fn window_input(&mut self, event: &WindowEvent) -> bool
@@ -284,81 +391,13 @@ impl State
         self.queue.write_buffer(&self.world.camera.camera_buffer, 0, bytemuck::cast_slice(&[self.world.camera.camera_uniform]));
     }
 
-
 // impl State
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> 
     {
 
-        let low_res_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            size: wgpu::Extent3d {
-                width: self.size.width / 4, // Lower resolution width
-                height: self.size.height / 4, // Lower resolution height
-                // width: self.size.width, // Lower resolution width
-                // height: self.size.height, // Lower resolution height
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Bgra8UnormSrgb, // Choose an appropriate format
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[wgpu::TextureFormat::Bgra8UnormSrgb],
-            label: Some("low_res_texture"),
-        });
 
-        // Create a texture view
-        let low_res_texture_view = low_res_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Create a sampler
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest, // 1.
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        // Create a bind group layout
-        let bind_group_layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-            label: Some("texture_bind_group_layout"),
-        });
-
-        // Create a bind group
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: Some("texture_bind_group"),
-        });
 
 
 

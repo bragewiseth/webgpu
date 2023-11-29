@@ -23,6 +23,9 @@ pub struct Camera {
     pub position: Point3<f32>,
     yaw: Rad<f32>,
     pitch: Rad<f32>,
+    uniform: CameraUniform,
+    bind_group: wgpu::BindGroup,
+    controller: CameraController,
 }
 
 impl Camera {
@@ -39,6 +42,18 @@ impl Camera {
             position: position.into(),
             yaw: yaw.into(),
             pitch: pitch.into(),
+            uniform: CameraUniform::new(),
+            bind_group: renderer::create_bind_group(
+                &renderer::device(),
+                &renderer::camera_layout(),
+                0,
+                wgpu::BindingType::UniformBuffer {
+                    dynamic: false,
+                    min_binding_size: None,
+                },
+                bytemuck::cast_slice(&[CameraUniform::new()]),
+            ),
+            controller: CameraController::new(5.0, 0.5),
         }
     }
 
