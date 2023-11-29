@@ -1,11 +1,14 @@
 use crate::core::texture;
+use crate::core::model::{DrawModel,  DrawLight};
 use crate::app::world;
+use crate::core::camera;
 
 
 use winit::window::Window;
 use winit:: event::*;
 use winit::window::CursorGrabMode;
-use cgmath::prelude::*;
+
+
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
@@ -26,14 +29,12 @@ pub enum CompareFunction {
 
 struct FrameBuffer
 {
-    framebuffers: Vec<wgpu::TextureView>,
-    depth_view: wgpu::TextureView,
-    
+    framebuffer: Option<texture::Texture>,
+    depth_texture: Option<texture::Texture>,
+    size: Option<winit::dpi::PhysicalSize<u32>>,
+    bind_group: Option<wgpu::BindGroup>,
+    bind_group_layout: Option<wgpu::BindGroupLayout>,
 }
-
-
-
-// cube
 
 
 
@@ -56,12 +57,9 @@ pub struct Renderer<'a>
 
 impl Renderer<'static>
 {
-
     pub async fn new(window: Window) -> Self
     {
         let size = window.inner_size();
-        // The instance is a handle to our GPU
-        // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(
             wgpu::InstanceDescriptor 
             {
@@ -116,48 +114,28 @@ impl Renderer<'static>
         surface.configure(&device, &config);
         
 
-
-
-
         let _modes = &surface_caps.present_modes;
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
-        let floorshader = device.create_shader_module(wgpu::include_wgsl!("shaders/floor.wgsl"));
-        let finalshader = device.create_shader_module(wgpu::include_wgsl!("shaders/final.wgsl"));
-        let world = world::new_world(&config, &device, &queue);
-        let bind_group_layouts = 
-        [
-            &world.entities[0].material.texture_bind_group_layout,
-            &world.camera.camera_bind_group_layout,
-        ];
-        let final_render_pipeline = pipeline::make_pipeline_final(&device, &config, &finalshader, &[&world.entities[0].material.texture_bind_group_layout]);
-        let floor_render_pipeline = pipeline::make_pipeline(&device, &config, &floorshader, &bind_group_layouts);
-        let render_pipeline = pipeline::make_pipeline(&device, &config, &shader, &bind_group_layouts);
-        let depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture");
+        
+        let world = world::World::new(&config, &device, &queue);
+        
 
-        let obj_model =
-            resources::load_model("shpere.obj", &device, &queue, &world.entities[0].material.texture_bind_group_layout)
-                .await
-                .unwrap();
+        // make pipelines 
+        let pixel_pipeline : wgpu::RenderPipeline;
+        let final_pipeline : wgpu::RenderPipeline;
+        {
+            let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
+            let floorshader = device.create_shader_module(wgpu::include_wgsl!("shaders/floor.wgsl"));
+            let finalshader = device.create_shader_module(wgpu::include_wgsl!("shaders/final.wgsl"));
+            let bind_group_layouts = 
+            [
+                &world.entities[0].material.texture_bind_group_layout,
+                &world.camera.camera_bind_group_layout,
+            ];
+            let final_render_pipeline = pipeline::make_pipeline_final(&device, &config, &finalshader, &[&world.entities[0].material.texture_bind_group_layout]);
+            let floor_render_pipeline = pipeline::make_pipeline(&device, &config, &floorshader, &bind_group_layouts);
+            let render_pipeline = pipeline::make_pipeline(&device, &config, &shader, &bind_group_layouts);
+        }
 
-        const SPACE_BETWEEN: f32 = 3.0;
-        let instances = (0..1).flat_map(|z| {
-            (0..1).map(move |x| {
-                let x = 2.0 * (x as f32 - 1.0 as f32 / 2.0);
-                let z = 2.0 * (z as f32 - 1.0 as f32 / 2.0);
-
-                let position = cgmath::Vector3 { x, y: 0.0, z };
-
-                let rotation = if position.is_zero() {
-                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-                } else {
-                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                };
-
-                Instance {
-                    position, rotation,
-                }
-            })
-        }).collect::<Vec<_>>();
 
 
 
@@ -205,25 +183,52 @@ impl Renderer<'static>
             label: Some("texture_bind_group"),
         });
 
-        let frame_buffers = vec![low_res_texture];
+
+
+        let frame_buffers = vec![
+            FrameBuffer
+            {
+                framebuffer: None, 
+                depth_texture: depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture") , 
+                size: size
+                bind_group: None,
+                bind_group_layout: None,
+            },
+            FrameBuffer
+            {
+                framebuffer: low_res_texture,
+                depth_texture: depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture") ,
+                size: size
+                bind_group: Some(bind_group),
+                bind_group_layout: Some(bind_group_layout),
+            },
+        ];
+
+        let camera = camera::Camera::new(
+            cgmath::Point3::new(0.0, 0.0, 3.0),
+            cgmath::Deg(0.0),
+            cgmath::Deg(0.0),
+            camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0),
+            camera::CameraController::new(5.0, 0.4),
+            &device,
+        );
+
 
         Self
         {
-            window,
             surface,
             device,
             queue,
             config,
             size,
+            window,
+            camera,
             render_pipelines : vec![final_render_pipeline, render_pipeline, floor_render_pipeline],
-            depth_texture,
-            mouse_locked: false,
+            frame_buffers,
+            passes : vec![],
             world,
-            screen_quad,
-            obj_model,
-            instances
+            mouse_locked: false,
         }
-
 
     }
 
@@ -254,7 +259,7 @@ impl Renderer<'static>
             &wgpu::PipelineLayoutDescriptor 
             {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&self.world.entities[0].material.texture_bind_group_layout, &self.world.camera.camera_bind_group_layout],
+                bind_group_layouts: &[&self.world.models,
                 push_constant_ranges: &[],
             }
         );

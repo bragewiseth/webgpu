@@ -1,4 +1,5 @@
 use cgmath::*;
+use wgpu::util::DeviceExt;
 use winit::event::*;
 use winit::dpi::PhysicalPosition;
 use instant::Duration;
@@ -23,10 +24,13 @@ pub struct Camera {
     pub position: Point3<f32>,
     yaw: Rad<f32>,
     pitch: Rad<f32>,
-    uniform: CameraUniform,
-    bind_group: wgpu::BindGroup,
-    controller: CameraController,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub bind_group: wgpu::BindGroup,
+    pub buffer : wgpu::Buffer,
+    pub uniform: CameraUniform,
+    pub controller: CameraController,
 }
+
 
 impl Camera {
     pub fn new<
@@ -37,39 +41,76 @@ impl Camera {
         position: V,
         yaw: Y,
         pitch: P,
-    ) -> Self {
-        Self {
+        projection: Projection,
+        controller: CameraController,
+        device: &wgpu::Device,
+    ) -> Self
+    {
+        
+        let mut camera_uniform = CameraUniform::new();
+
+        let camera_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+
+        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("camera_bind_group_layout"),
+        });
+
+
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("camera_bind_group"),
+        });
+
+
+        let mut cam = Self {
             position: position.into(),
             yaw: yaw.into(),
             pitch: pitch.into(),
-            uniform: CameraUniform::new(),
-            bind_group: renderer::create_bind_group(
-                &renderer::device(),
-                &renderer::camera_layout(),
-                0,
-                wgpu::BindingType::UniformBuffer {
-                    dynamic: false,
-                    min_binding_size: None,
-                },
-                bytemuck::cast_slice(&[CameraUniform::new()]),
-            ),
-            controller: CameraController::new(5.0, 0.5),
-        }
+            bind_group_layout: camera_bind_group_layout,
+            bind_group: camera_bind_group,
+            buffer: camera_buffer,
+            uniform: camera_uniform,
+            controller,
+        };
+        camera_uniform.update_view_proj(&cam, &projection);
+        cam.uniform = camera_uniform;
+        cam
+
     }
+
+
+
+
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
         let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
         let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
 
-        // Matrix4::look_to_rh(
-        //     self.position,
-        //     Vector3::new(
-        //         cos_pitch * cos_yaw,
-        //         sin_pitch,
-        //         cos_pitch * sin_yaw
-        //     ).normalize(),
-        //     Vector3::unit_y(),
-        // )
         Matrix4::look_to_rh(
             self.position,
             Vector3::new(
@@ -206,30 +247,21 @@ impl CameraController {
         camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
         camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
 
-        // Move in/out (aka. "zoom")
-        // Note: this isn't an actual zoom. The camera's position
-        // changes when zooming. I've added this to make it easier
-        // to get closer to an object you want to focus on.
         let (pitch_sin, pitch_cos) = camera.pitch.0.sin_cos();
         let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
         camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
 
-        // Move up/down. Since we don't use roll, we can just
-        // modify the y coordinate directly.
+
         camera.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
 
-        // Rotate
         camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;
         camera.pitch += Rad(-self.rotate_vertical) * self.sensitivity * dt;
 
-        // If process_mouse isn't called every frame, these values
-        // will not get set to zero, and the camera will rotate
-        // when moving in a non cardinal direction.
+
         self.rotate_horizontal = 0.0;
         self.rotate_vertical = 0.0;
 
-        // Keep the camera's angle from going too high/low.
         if camera.pitch < -Rad(SAFE_FRAC_PI_2) {
             camera.pitch = -Rad(SAFE_FRAC_PI_2);
         } else if camera.pitch > Rad(SAFE_FRAC_PI_2) {
@@ -265,3 +297,4 @@ impl CameraUniform {
         self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
     }
 }
+
