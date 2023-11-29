@@ -1,3 +1,7 @@
+
+// wil be deprecated in favor of the model component
+
+
 use crate::components::texture;
 
 

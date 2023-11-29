@@ -1,5 +1,6 @@
 // use crate::components::world::World;
 use crate::components::texture;
+use crate::components::mesh::Mesh;
 use crate::components::world::World;
 use winit::window::Window;
 use winit:: event::*;
@@ -39,8 +40,9 @@ pub struct State
     window: Window,
     render_pipeline : Vec<wgpu::RenderPipeline>,
     depth_texture: texture::Texture,
-    mouse_pressed: bool,
+    mouse_locked: bool,
     world : World,
+    screen_quad: Mesh,
 }
 
 
@@ -117,15 +119,19 @@ impl State
         let _modes = &surface_caps.present_modes;
         let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
         let floorshader = device.create_shader_module(wgpu::include_wgsl!("shaders/floor.wgsl"));
+        let finalshader = device.create_shader_module(wgpu::include_wgsl!("shaders/final.wgsl"));
         let world = world::new_world(&config, &device, &queue);
         let bind_group_layouts = 
         [
             &world.entities[0].material.texture_bind_group_layout,
             &world.camera.camera_bind_group_layout,
         ];
-        let render_pipeline = pipeline::make_pipeline_wire(&device, &config, &shader, &bind_group_layouts); 
+        let screen_quad = crate::instances::screenquad::new_entity(&device);
+        let final_render_pipeline = pipeline::make_pipeline_final(&device, &config, &finalshader, &[&world.entities[0].material.texture_bind_group_layout]);
         let floor_render_pipeline = pipeline::make_pipeline(&device, &config, &floorshader, &bind_group_layouts);
+        let render_pipeline = pipeline::make_pipeline(&device, &config, &shader, &bind_group_layouts);
         let depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture");
+
 
 
         Self
@@ -136,10 +142,11 @@ impl State
             queue,
             config,
             size,
-            render_pipeline : vec![render_pipeline,floor_render_pipeline],
+            render_pipeline : vec![final_render_pipeline, render_pipeline, floor_render_pipeline],
             depth_texture,
-            mouse_pressed: false,
+            mouse_locked: false,
             world,
+            screen_quad,
         }
     }
 
@@ -190,19 +197,18 @@ impl State
                     ..
             } => 
             {
-                static mut currentMode : bool = false;
-                if unsafe { currentMode } == false
+                if self.mouse_locked == false
                 {
                     self.window.set_cursor_grab(CursorGrabMode::Confined).or_else(|_| 
                         self.window.set_cursor_grab(CursorGrabMode::Locked)).unwrap();
                     self.window.set_cursor_visible(false);
-                    unsafe { currentMode = true; }
+                    self.mouse_locked = true; 
                 }
                 else
                 {
                     self.window.set_cursor_grab(CursorGrabMode::None).unwrap();
                     self.window.set_cursor_visible(true);
-                    unsafe { currentMode = false; }
+                    self.mouse_locked = false;
                 }
                 true
             }
@@ -225,15 +231,6 @@ impl State
                 self.window.set_title(&format!("{:?}", self.world.camera.camera.position));
                 true
             }
-            WindowEvent::MouseInput {
-                button: MouseButton::Left,
-                state,
-                ..
-            } => {
-                self.mouse_pressed = *state == ElementState::Pressed;
-                true
-            }
-
             _ => false,
         }
     }
@@ -244,7 +241,7 @@ impl State
     {
         match event
         {
-            DeviceEvent::MouseMotion{ delta, } => 
+            DeviceEvent::MouseMotion{ delta, } if self.mouse_locked == true => 
             {
                 self.world.camera.camera_controller.process_mouse(delta.0, delta.1);
                 true
@@ -272,6 +269,78 @@ impl State
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> 
     {
 
+        let low_res_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            size: wgpu::Extent3d {
+                width: self.size.width / 4, // Lower resolution width
+                height: self.size.height / 4, // Lower resolution height
+                // width: self.size.width, // Lower resolution width
+                // height: self.size.height, // Lower resolution height
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb, // Choose an appropriate format
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[wgpu::TextureFormat::Bgra8UnormSrgb],
+            label: Some("low_res_texture"),
+        });
+
+        // Create a texture view
+        let low_res_texture_view = low_res_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Create a sampler
+        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest, // 1.
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        // Create a bind group layout
+        let bind_group_layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+            label: Some("texture_bind_group_layout"),
+        });
+
+        // Create a bind group
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+            label: Some("texture_bind_group"),
+        });
+
+
+
 
 
         let output = self.surface.get_current_texture()?;
@@ -287,20 +356,20 @@ impl State
             let mut render_pass = encoder.begin_render_pass(
                 &wgpu::RenderPassDescriptor 
                 {
-                    label: Some("Second Pass"),
+                    label: Some("Pixel Pass"),
                     color_attachments: &[Some(
                         wgpu::RenderPassColorAttachment 
                         {
-                            view: &view,
+                            view: &low_res_texture_view,
                             resolve_target: None,
                             ops: wgpu::Operations 
                             {
                                 load: wgpu::LoadOp::Clear(
                                     wgpu::Color 
                                     {
-                                        r: 0.1,
-                                        g: 0.1,
-                                        b: 0.1,
+                                        r: 0.15,
+                                        g: 0.15,
+                                        b: 0.15,
                                         a: 1.0,
                                     }   
                                     // self.color
@@ -322,19 +391,26 @@ impl State
                 }
             );
 
-            render_pass.set_pipeline(&self.render_pipeline[1]);
+            render_pass.set_pipeline(&self.render_pipeline[2]);
             render_pass.set_bind_group(0, &self.world.entities[1].material.diffuse_bind_group, &[]); // NEW!
             render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.world.entities[1].mesh.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.world.entities[1].instances.as_ref().unwrap().instance_buffer.slice(..));
             render_pass.set_index_buffer(self.world.entities[1].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.world.entities[1].mesh.num_indices, 0, 0..1 as _);
+            render_pass.set_pipeline(&self.render_pipeline[1]);
+            render_pass.set_bind_group(0, &self.world.entities[0].material.diffuse_bind_group, &[]); // NEW!
+            render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.world.entities[0].mesh.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.world.entities[0].instances.as_ref().unwrap().instance_buffer.slice(..));
+            render_pass.set_index_buffer(self.world.entities[0].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.world.entities[0].mesh.num_indices, 0, 0..3 as _);
         }  
         {
             let mut render_pass = encoder.begin_render_pass(
                 &wgpu::RenderPassDescriptor 
                 {
-                    label: Some("First Pass"),
+                    label: Some("Final Pass"),
                     color_attachments: &[Some(
                         wgpu::RenderPassColorAttachment 
                         {
@@ -347,27 +423,18 @@ impl State
                             },
                         }
                     )],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    }),
+                    depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 }
             );
 
             render_pass.set_pipeline(&self.render_pipeline[0]);
-            render_pass.set_bind_group(0, &self.world.entities[0].material.diffuse_bind_group, &[]); // NEW!
-            render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.world.entities[0].mesh.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.world.entities[0].instances.as_ref().unwrap().instance_buffer.slice(..));
-            render_pass.set_index_buffer(self.world.entities[0].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.world.entities[0].mesh.num_indices, 0, 0..3 as _);
-        }        // submit will accept anything that implements IntoIter
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.screen_quad.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.screen_quad.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..6, 0, 0..1 as _);
+        }
 
         //
         self.queue.submit(std::iter::once(encoder.finish()));

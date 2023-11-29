@@ -16,6 +16,13 @@ bytemuck = { version = "1.12", features = [ "derive" ] }
 cgmath = "0.18"
 anyhow = "1.0" # NEW!
 instant = "0.1"
+tobj = { version = "3.2.1", features = [
+    "async",
+]}
+
+
+
+
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.6"
@@ -27,7 +34,9 @@ web-sys = { version = "0.3", features = [
     "Document",
     "Window",
     "Element",
+    "Location",
 ]}
+reqwest = { version = "0.11" }
 
 
 [lib]
@@ -40,3 +49,11 @@ crate-type = ["cdylib", "rlib"]
 version = "0.24"
 default-features = false
 features = ["png", "jpeg",]
+
+
+
+
+[build-dependencies]
+anyhow = "1.0"
+fs_extra = "1.2"
+glob = "0.3"

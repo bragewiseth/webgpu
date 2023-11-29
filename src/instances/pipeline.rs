@@ -76,7 +76,7 @@ pub fn make_pipeline(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration,
 
 
 
-pub fn make_pipeline_wire(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, shader: &wgpu::ShaderModule, bind_group_layouts: &[&wgpu::BindGroupLayout]) -> wgpu::RenderPipeline
+pub fn make_pipeline_final(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, shader: &wgpu::ShaderModule, bind_group_layouts: &[&wgpu::BindGroupLayout]) -> wgpu::RenderPipeline
 {
     let render_pipeline_layout = device.create_pipeline_layout(
                 &wgpu::PipelineLayoutDescriptor {
@@ -95,7 +95,7 @@ pub fn make_pipeline_wire(device: &wgpu::Device, config: &wgpu::SurfaceConfigura
             {
                 module: &shader,
                 entry_point: "vs_main", // 1.
-                buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()], // 2.
+                buffers: &[model::ModelVertex::desc()]
             },
             fragment: Some(
                 wgpu::FragmentState 
@@ -127,13 +127,7 @@ pub fn make_pipeline_wire(device: &wgpu::Device, config: &wgpu::SurfaceConfigura
                 conservative: false,
             },
 
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: texture::Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less, // 1.
-                stencil: wgpu::StencilState::default(), // 2.
-                bias: wgpu::DepthBiasState::default(),
-            }),
+            depth_stencil: None,
 
             multisample: wgpu::MultisampleState 
             {

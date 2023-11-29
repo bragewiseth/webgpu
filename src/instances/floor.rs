@@ -12,11 +12,14 @@ use cgmath::prelude::*;
 
 // floor
 pub const VERTICES: &[ModelVertex] = &[
-    ModelVertex { position: [ 100.0,  100.0,  0.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.3, 0.4, 0.2] },
-    ModelVertex { position: [-100.0,  100.0,  0.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.3, 0.4, 0.2] },
-    ModelVertex { position: [-100.0, -100.0,  0.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.3, 0.4, 0.2] },
-    ModelVertex { position: [ 100.0, -100.0,  0.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.3, 0.4, 0.2] },
-
+    ModelVertex { position: [ 10000.0,  10000.0,  0.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.6, 0.4] },
+    ModelVertex { position: [-10000.0,  10000.0,  0.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.5, 0.4] },
+    ModelVertex { position: [-10000.0, -10000.0,  0.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.5, 0.4] },
+    ModelVertex { position: [ 10000.0, -10000.0,  0.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.6, 0.4] },
+    // ModelVertex { position: [ 10.0,  10.0,  0.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.6, 0.4] },
+    // ModelVertex { position: [-10.0,  10.0,  0.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.5, 0.4] },
+    // ModelVertex { position: [-10.0, -10.0,  0.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.5, 0.4] },
+    // ModelVertex { position: [ 10.0, -10.0,  0.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 1.0], color: [0.6, 0.6, 0.4] },
 ];
 
 

@@ -20,7 +20,7 @@ impl FPSCamera
     pub fn new(config: &wgpu::SurfaceConfiguration, device: &wgpu::Device) -> Self
     {
         let camera = camera::Camera::new((2.0, 4.0, 2.0), cgmath::Deg(180.0), cgmath::Deg(-10.0));
-        let projection = camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let projection = camera::Projection::new(config.width, config.height, cgmath::Deg(40.0), 0.1, 100.0);
         let camera_controller = camera::CameraController::new(4.0, 0.4);
 
         let mut camera_uniform = camera::CameraUniform::new();

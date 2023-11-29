@@ -70,7 +70,7 @@ impl Texture {
                 address_mode_v: wgpu::AddressMode::ClampToEdge,
                 address_mode_w: wgpu::AddressMode::ClampToEdge,
                 mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Linear, // 1.
                 mipmap_filter: wgpu::FilterMode::Nearest,
                 ..Default::default()
             }
@@ -81,8 +81,10 @@ impl Texture {
     
     pub fn create_depth_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, label: &str) -> Self {
         let size = wgpu::Extent3d { // 2.
-            width: config.width,
-            height: config.height,
+            // width: config.width,
+            width: config.width / 4,
+            // height: config.height,
+            height: config.height / 4,
             depth_or_array_layers: 1,
         };
         let desc = wgpu::TextureDescriptor {

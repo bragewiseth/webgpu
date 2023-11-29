@@ -1,3 +1,5 @@
+// wil be deprecated in favor of the model component
+
 
 pub struct Mesh 
 {
