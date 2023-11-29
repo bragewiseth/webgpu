@@ -5,6 +5,8 @@ use winit::dpi::PhysicalPosition;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 
+use crate::pipeline::Uniform;
+
 
 
 const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
@@ -24,7 +26,6 @@ pub struct Camera {
     pub position: Point3<f32>,
     yaw: Rad<f32>,
     pitch: Rad<f32>,
-    pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
     pub buffer : wgpu::Buffer,
     pub uniform: CameraUniform,
@@ -57,26 +58,11 @@ impl Camera {
             }
         );
 
-        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ],
-            label: Some("camera_bind_group_layout"),
-        });
 
 
 
         let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
+            layout: &Uniform::<Camera>::desc(device),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -91,7 +77,6 @@ impl Camera {
             position: position.into(),
             yaw: yaw.into(),
             pitch: pitch.into(),
-            bind_group_layout: camera_bind_group_layout,
             bind_group: camera_bind_group,
             buffer: camera_buffer,
             uniform: camera_uniform,

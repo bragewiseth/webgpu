@@ -10,31 +10,10 @@ use winit::window::CursorGrabMode;
 
 
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum CompareFunction {
-    Undefined = 0,
-    Never = 1,
-    Less = 2,
-    Equal = 3,
-    LessEqual = 4,
-    Greater = 5,
-    NotEqual = 6,
-    GreaterEqual = 7,
-    Always = 8,
-}
 
 
 
-struct FrameBuffer
-{
-    framebuffer: Option<texture::Texture>,
-    depth_texture: Option<texture::Texture>,
-    size: Option<winit::dpi::PhysicalSize<u32>>,
-    bind_group: Option<wgpu::BindGroup>,
-    bind_group_layout: Option<wgpu::BindGroupLayout>,
-}
+
 
 
 
@@ -126,16 +105,7 @@ impl Renderer<'static>
             let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
             let floorshader = device.create_shader_module(wgpu::include_wgsl!("shaders/floor.wgsl"));
             let finalshader = device.create_shader_module(wgpu::include_wgsl!("shaders/final.wgsl"));
-            let bind_group_layouts = 
-            [
-                &world.entities[0].material.texture_bind_group_layout,
-                &world.camera.camera_bind_group_layout,
-            ];
-            let final_render_pipeline = pipeline::make_pipeline_final(&device, &config, &finalshader, &[&world.entities[0].material.texture_bind_group_layout]);
-            let floor_render_pipeline = pipeline::make_pipeline(&device, &config, &floorshader, &bind_group_layouts);
-            let render_pipeline = pipeline::make_pipeline(&device, &config, &shader, &bind_group_layouts);
         }
-
 
 
 
@@ -145,27 +115,7 @@ impl Renderer<'static>
             "low_res_texture", 
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC, wgpu::TextureFormat::Rgba8UnormSrgb);
         // Create a bind group layout
-        let bind_group_layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-            label: Some("texture_bind_group_layout"),
-        });
+
 
         // Create a bind group
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -253,72 +203,7 @@ impl Renderer<'static>
         }
     }
 
-    pub fn make_pipeline(&self, shader: &wgpu::ShaderModule) -> wgpu::RenderPipeline
-    {
-        let render_pipeline_layout = self.device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor 
-            {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&self.world.models,
-                push_constant_ranges: &[],
-            }
-        );
-        self.device.create_render_pipeline(
-            &wgpu::RenderPipelineDescriptor 
-            {
-                label: Some("Render Pipeline"),
-                layout: Some(&render_pipeline_layout),
-                vertex: wgpu::VertexState 
-                {
-                    module: shader,
-                    entry_point: "main",
-                    buffers: &[
-                        wgpu::VertexBufferLayout 
-                        {
-                            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                            step_mode: wgpu::InputStepMode::Vertex,
-                            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-                        }
-                    ],
-                },
-                fragment: Some(wgpu::FragmentState 
-                {
-                    module: shader,
-                    entry_point: "main",
-                    targets: &[wgpu::ColorTargetState 
-                    {
-                        format: self.config.format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }],
-                }),
-                primitive: wgpu::PrimitiveState 
-                {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    clamp_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: Some(wgpu::DepthStencilState 
-                {
-                    format: texture::Texture::DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState 
-                {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-            }
-        )
-    }
+
 
 // impl State
     pub fn window_input(&mut self, event: &WindowEvent) -> bool
