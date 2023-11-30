@@ -2,6 +2,7 @@ use crate::core::texture;
 use crate::core::model::{DrawModel,  DrawLight};
 use crate::app::world;
 use crate::core::camera;
+use crate::core::pipeline;
 
 
 use winit::window::Window;
@@ -12,12 +13,7 @@ use winit::window::CursorGrabMode;
 
 
 
-
-
-
-
-
-pub struct Renderer<'a>
+pub struct Renderer
 {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -26,17 +22,20 @@ pub struct Renderer<'a>
     pub size: winit::dpi::PhysicalSize<u32>,// The window must be declared after, the surface contains unsafe references to the window's resources.
     window: Window,
     camera: camera::Camera,
-    render_pipelines : Vec<wgpu::RenderPipeline>,
-    frame_buffers : Vec<FrameBuffer>,
-    passes : Vec<wgpu::RenderPass<'a>>,
+    pixel_pipeline : wgpu::RenderPipeline,
+    floor_pipeline : wgpu::RenderPipeline,
+    final_pipeline : wgpu::RenderPipeline,
+    frame_buffer : pipeline::Framebuffer,
     world : world::World,
     mouse_locked: bool
 }
 
 
-impl Renderer<'static>
+
+
+impl Renderer
 {
-    pub async fn new(window: Window) -> Self
+    pub async fn new(window: Window) -> Result<Self, wgpu::SurfaceError> 
     {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(
@@ -96,10 +95,9 @@ impl Renderer<'static>
         let _modes = &surface_caps.present_modes;
         
         let world = world::World::new(&config, &device, &queue);
-        
 
-        // make pipelines 
         let pixel_pipeline : wgpu::RenderPipeline;
+        let floor_pipeline : wgpu::RenderPipeline;
         let final_pipeline : wgpu::RenderPipeline;
         {
             let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
@@ -108,51 +106,29 @@ impl Renderer<'static>
         }
 
 
+        let output = surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let framebuffer = pipeline::Framebuffer::new(&device, &config, view);
+        let secondframebuffer: pipeline::Framebuffer;
 
-        let low_res_texture = texture::Texture::create_blank_texture(
-            &self.device, 
-            &self.config.width / 4 , &self.config.height / 4,
-            "low_res_texture", 
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC, wgpu::TextureFormat::Rgba8UnormSrgb);
-        // Create a bind group layout
-
-
-        // Create a bind group
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: Some("texture_bind_group"),
-        });
-
-
-
-        let frame_buffers = vec![
-            FrameBuffer
+        {
+            let config = wgpu::SurfaceConfiguration 
             {
-                framebuffer: None, 
-                depth_texture: depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture") , 
-                size: size
-                bind_group: None,
-                bind_group_layout: None,
-            },
-            FrameBuffer
-            {
-                framebuffer: low_res_texture,
-                depth_texture: depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture") ,
-                size: size
-                bind_group: Some(bind_group),
-                bind_group_layout: Some(bind_group_layout),
-            },
-        ];
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: surface_format,
+                width: size.width /4,
+                height: size.height /4,
+                present_mode: surface_caps.present_modes[0],
+                alpha_mode: surface_caps.alpha_modes[0],
+                view_formats: vec![],
+            };
+            let texture = texture::Texture::create_blank_texture(&device, &config, "depth_texture", wgpu::FilterMode::Nearest);
+            secondframebuffer = pipeline::Framebuffer::new(&device, &config, &view);
+        }
+
+
+
+
 
         let camera = camera::Camera::new(
             cgmath::Point3::new(0.0, 0.0, 3.0),
@@ -164,7 +140,7 @@ impl Renderer<'static>
         );
 
 
-        Self
+        let renderer = Self
         {
             surface,
             device,
@@ -173,12 +149,14 @@ impl Renderer<'static>
             size,
             window,
             camera,
-            render_pipelines : vec![final_render_pipeline, render_pipeline, floor_render_pipeline],
-            frame_buffers,
-            passes : vec![],
+            pixel_pipeline,
+            floor_pipeline,
+            final_pipeline,
+            frame_buffer,
             world,
             mouse_locked: false,
-        }
+        };
+        Ok(renderer)
 
     }
 
@@ -187,6 +165,10 @@ impl Renderer<'static>
     {
         &self.window
     }
+
+
+
+
 
     // impl State
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>)
@@ -202,6 +184,9 @@ impl Renderer<'static>
             self.world.camera.projection.resize(new_size.width, new_size.height);
         }
     }
+
+
+
 
 
 
@@ -283,18 +268,15 @@ impl Renderer<'static>
 
 // impl State
 
+
+
+
+
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> 
     {
 
 
 
-
-
-
-
-
-        let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoder = self.device.create_command_encoder(
             &wgpu::CommandEncoderDescriptor 
@@ -310,7 +292,7 @@ impl Renderer<'static>
                     color_attachments: &[Some(
                         wgpu::RenderPassColorAttachment 
                         {
-                            view: &low_res_texture_view,
+                            view: &view,
                             resolve_target: None,
                             ops: wgpu::Operations 
                             {
@@ -341,48 +323,48 @@ impl Renderer<'static>
                 }
             );
 
-            render_pass.set_pipeline(&self.render_pipeline[2]);
+            render_pass.set_pipeline(&self.pixel_pipeline);
             render_pass.set_bind_group(0, &self.world.entities[1].material.diffuse_bind_group, &[]); // NEW!
             render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.world.entities[1].mesh.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.world.entities[1].instances.as_ref().unwrap().instance_buffer.slice(..));
             render_pass.set_index_buffer(self.world.entities[1].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.world.entities[1].mesh.num_indices, 0, 0..1 as _);
-            render_pass.set_pipeline(&self.render_pipeline[1]);
+            render_pass.set_pipeline(&self.floor_pipeline);
             render_pass.set_bind_group(0, &self.world.entities[0].material.diffuse_bind_group, &[]); // NEW!
             render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
             use crate::components::model::DrawModel;
             render_pass.draw_mesh_instanced(&self.obj_model.meshes[0], &self.obj_model.materials[0], 0..1, &self.world.camera.camera_bind_group);
         }  
-        {
-            let mut render_pass = encoder.begin_render_pass(
-                &wgpu::RenderPassDescriptor 
-                {
-                    label: Some("Final Pass"),
-                    color_attachments: &[Some(
-                        wgpu::RenderPassColorAttachment 
-                        {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations 
-                            {
-                                load: wgpu::LoadOp::Load,
-                                store: wgpu::StoreOp::Store,
-                            },
-                        }
-                    )],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                }
-            );
-
-            render_pass.set_pipeline(&self.render_pipeline[0]);
-            render_pass.set_bind_group(0, &bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.screen_quad.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.screen_quad.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..6, 0, 0..1 as _);
-        }
+        // {
+        //     let mut render_pass = encoder.begin_render_pass(
+        //         &wgpu::RenderPassDescriptor 
+        //         {
+        //             label: Some("Final Pass"),
+        //             color_attachments: &[Some(
+        //                 wgpu::RenderPassColorAttachment 
+        //                 {
+        //                     view: &view,
+        //                     resolve_target: None,
+        //                     ops: wgpu::Operations 
+        //                     {
+        //                         load: wgpu::LoadOp::Load,
+        //                         store: wgpu::StoreOp::Store,
+        //                     },
+        //                 }
+        //             )],
+        //             depth_stencil_attachment: None,
+        //             timestamp_writes: None,
+        //             occlusion_query_set: None,
+        //         }
+        //     );
+        //
+        //     render_pass.set_pipeline(&self.final_pipeline);
+        //     render_pass.set_bind_group(0, &bind_group, &[]);
+        //     render_pass.set_vertex_buffer(0, self.screen_quad.vertex_buffer.slice(..));
+        //     render_pass.set_index_buffer(self.screen_quad.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        //     render_pass.draw_indexed(0..6, 0, 0..1 as _);
+        // }
 
         //
         self.queue.submit(std::iter::once(encoder.finish()));

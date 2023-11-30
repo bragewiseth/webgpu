@@ -1,4 +1,5 @@
 use crate::core::pipeline::InstanceRaw;
+use crate::core::texture;
 
 
 use core::ops::Range;

@@ -1,6 +1,7 @@
 // This file contains layouts for gpu input
 use crate::core::camera::Camera;
 use crate::core::model::Material;
+use crate::core::texture;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
@@ -39,19 +40,20 @@ pub trait PushConstant
     fn desc() -> wgpu::PushConstantRange;
 }
 
+
 pub trait PipelineLayout
 {
     fn new(device : &wgpu::Device, bind_group_layouts : &[&wgpu::BindGroupLayout] ) -> Self;
-    fn build_pipeline(&self, shader: &wgpu::ShaderModule, depth_stencil: &wgpu::TextureView) -> wgpu::RenderPipeline;
+    fn build_pipeline(&self, device: wgpu::Device, config: &wgpu::SurfaceConfiguration, 
+        shader: &wgpu::ShaderModule, depth_stencil: Option<wgpu::DepthStencilState>, buffers : &[wgpu::VertexBufferLayout<'static>]) -> wgpu::RenderPipeline; 
 }
 
 
-struct Framebuffer
+pub struct Framebuffer
 {
     pub texture: texture::Texture,
-    pub depth_texture: texture::Texture,
-    pub size: winit::dpi::PhysicalSize<u32>,
-    pub bind_group: wgpu::BindGroup,
+    pub bind_group: Option<wgpu::BindGroup>,
+    pub depth_texture: Option<texture::Texture>,
 }
 
 
@@ -244,6 +246,7 @@ impl PipelineLayout for wgpu::PipelineLayout
     fn build_pipeline(
         &self, 
         device: wgpu::Device, 
+        config: &wgpu::SurfaceConfiguration,
         shader: &wgpu::ShaderModule, 
         depth_stencil: Option<wgpu::DepthStencilState>,
         buffers : &[wgpu::VertexBufferLayout<'static>]) -> wgpu::RenderPipeline
@@ -259,17 +262,21 @@ impl PipelineLayout for wgpu::PipelineLayout
                     entry_point: "vs_main",
                     buffers,
                 },
-                fragment: Some(wgpu::FragmentState 
-                {
-                    module: shader,
-                    entry_point: "fs_main",
-                    targets: Some(&[wgpu::ColorTargetState
-                    {
-                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                }),
+                fragment: Some(
+                    wgpu::FragmentState 
+                    { // 3.
+                        module: &shader,
+                        entry_point: "fs_main",
+                        targets: &[Some(
+                            wgpu::ColorTargetState 
+                            { // 4.
+                                format: config.format,
+                                blend: Some(wgpu::BlendState::REPLACE),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            }
+                        )],
+                    }
+                ),
                 primitive: wgpu::PrimitiveState 
                 {
                     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -287,6 +294,7 @@ impl PipelineLayout for wgpu::PipelineLayout
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
+                multiview: None, // 5.
             }
         )
     }
@@ -304,5 +312,33 @@ impl Layouts
         let texture = Material::desc(device);
         // let light = Light::desc(device);
         Self { camera, texture }
+    }
+}
+
+
+
+
+
+impl Framebuffer
+{
+    pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, texture: texture::Texture) -> Self
+    {
+        // let size = winit::dpi::PhysicalSize::<u32>::from(config.extent);
+        let depth_texture = texture::Texture::create_depth_texture(device, &config, "depth_texture");
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+            label: Some("texture_bind_group"),
+        });
+        Self { texture, depth_texture, bind_group }
     }
 }

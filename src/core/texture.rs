@@ -77,18 +77,17 @@ impl Texture {
             }
         );
         
-        Ok(Self { texture, view, sampler })
+        Ok(Self { texture, view, Some(sampler) })
     }
     
     pub fn create_depth_texture(device: &wgpu::Device,
-        width: u32, 
-        height: u32, 
+        device: &wgpu::Device,
         label: &str,
         filter: wgpu::FilterMode,
     ) -> Self {
         let size = wgpu::Extent3d { // 2.
-            width,
-            height,
+            width: config.width,
+            height : config.height,
             depth_or_array_layers: 1,
         };
         let desc = wgpu::TextureDescriptor {
@@ -130,22 +129,20 @@ impl Texture {
 
 
     pub fn create_blank_texture(device: &wgpu::Device, 
-        width: u32, 
-        height: u32, 
-        formats: &[wgpu::TextureFormat], 
+        config: &wgpu::SurfaceConfiguration,
         label: &str,
         filter: wgpu::FilterMode,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
-                width,
-                height,
+                width:config.width,
+                height:config.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: formats[0],
+            format: config.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
             label: Some(label),
