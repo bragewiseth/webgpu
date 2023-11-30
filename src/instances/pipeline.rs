@@ -139,4 +139,3 @@ pub fn make_pipeline_final(device: &wgpu::Device, config: &wgpu::SurfaceConfigur
         }
     )
 }
-
