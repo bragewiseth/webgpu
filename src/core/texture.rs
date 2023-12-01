@@ -77,19 +77,18 @@ impl Texture {
             }
         );
         
-        Ok(Self { texture, view, Some(sampler) })
+        Ok(Self { texture, view, sampler })
     }
-    
-    pub fn create_depth_texture(device: &wgpu::Device,
+   
+
+
+    pub fn create_depth_texture(
         device: &wgpu::Device,
+        size : wgpu::Extent3d,
         label: &str,
         filter: wgpu::FilterMode,
     ) -> Self {
-        let size = wgpu::Extent3d { // 2.
-            width: config.width,
-            height : config.height,
-            depth_or_array_layers: 1,
-        };
+
         let desc = wgpu::TextureDescriptor {
             label: Some(label),
             size,
@@ -109,9 +108,9 @@ impl Texture {
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
                 address_mode_v: wgpu::AddressMode::ClampToEdge,
                 address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::filter,
-                min_filter: wgpu::FilterMode::filter, // 1.
-                mipmap_filter: wgpu::FilterMode::filter,
+                mag_filter: filter,
+                min_filter: filter,
+                mipmap_filter: filter,
                 compare: Some(wgpu::CompareFunction::LessEqual), // 5.
                 lod_min_clamp: 0.0,
                 lod_max_clamp: 100.0,
@@ -128,21 +127,18 @@ impl Texture {
 
 
 
-    pub fn create_blank_texture(device: &wgpu::Device, 
-        config: &wgpu::SurfaceConfiguration,
+    pub fn create_blank_texture(
+        device: &wgpu::Device, 
+        size : wgpu::Extent3d,
         label: &str,
         filter: wgpu::FilterMode,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: wgpu::Extent3d {
-                width:config.width,
-                height:config.height,
-                depth_or_array_layers: 1,
-            },
+            size, 
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: config.format,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
             label: Some(label),
@@ -156,9 +152,9 @@ impl Texture {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::filter,
-            min_filter: wgpu::FilterMode::filter, // 1.
-            mipmap_filter: wgpu::FilterMode::filter,
+            mag_filter: filter,
+            min_filter: filter,
+            mipmap_filter: filter,
             ..Default::default()
         });
 

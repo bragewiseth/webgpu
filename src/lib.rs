@@ -51,10 +51,7 @@ pub async fn run()
 
     #[cfg(target_arch = "wasm32")]
     {
-        // Winit prevents sizing with CSS, so we have to set
-        // the size manually when on web.
         use winit::dpi::PhysicalSize;
-        // fullscreen
         window.set_inner_size(PhysicalSize::new(1200, 1000));
 
         use winit::platform::web::WindowExtWebSys;

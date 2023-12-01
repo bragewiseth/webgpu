@@ -24,6 +24,7 @@ impl Instance {
 }
 
 
+
 pub struct Instances
 {
     pub instances: Vec<Instance>,
@@ -37,8 +38,23 @@ pub struct Instances
 pub struct Material 
 {
     pub name: String,
-    pub diffuse_texture: texture::Texture,
+    pub diffuse: Diffuse,
     pub bind_group: wgpu::BindGroup,
+}
+
+
+
+pub enum Diffuse
+{
+    ColorFactor([f32; 4]),
+    Texture(texture::Texture),
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ColorUniform
+{
+    pub color: [f32; 4],
 }
 
 
@@ -61,6 +77,19 @@ pub struct Model
 }
 
 
+
+impl ColorUniform 
+{
+    pub fn new(color : Diffuse ) -> Self 
+    {
+        match color 
+        {
+            Diffuse::ColorFactor(color) => Self { color },
+            Diffuse::Texture(_) => Self { color: [1.0; 4] },
+        }
+
+    }
+}
 
 
 

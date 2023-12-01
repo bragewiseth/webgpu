@@ -1,10 +1,8 @@
+use crate::core::model::{Model, Mesh, Instance, Instances, Diffuse, Material, ColorUniform };
+use crate::core::pipeline::{ Layouts, ModelVertex };
+
+
 use cgmath::prelude::*;
-use crate::components::entity;
-use crate::components::entity_instancing:: { Instance, Instances };
-use crate::components::model::ModelVertex;
-use crate::components::mesh::Mesh;
-use crate::components::material::Material;
-use crate::components::texture;
 use wgpu::util::DeviceExt;
 
 
@@ -52,21 +50,78 @@ pub const INDICES: &[u16] = &[
     
 ];
 
+const NUM_INSTANCES_PER_ROW: u32 = 10;
+const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3 { x: 5.0, y: 0.0, z: 0.0 };
 
 
-pub fn new_entity(device: &wgpu::Device, queue: &wgpu::Queue) -> entity::Entity
+pub fn new(device: &wgpu::Device,  layouts: &Layouts ) -> (Model, Instances)
 {
 
+    // let diffuse_bind_group = device.create_bind_group(
+    //     &wgpu::BindGroupDescriptor {
+    //         layout: &texture_bind_group_layout,
+    //         entries: &[
+    //             wgpu::BindGroupEntry {
+    //                 binding: 0,
+    //                 resource: wgpu::BindingResource::TextureView(&diffuse_texture.view), // CHANGED!
+    //             },
+    //             wgpu::BindGroupEntry {
+    //                 binding: 1,
+    //                 resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler), // CHANGED!
+    //             }
+    //         ],
+    //         label: Some("diffuse_bind_group"),
+    //     }
+    // );
+
+    let vertex_buffer = device.create_buffer_init(
+        &wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        }
+    );
+    let index_buffer = device.create_buffer_init(
+        &wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        }
+    );
+    let num_elements = INDICES.len() as u32;
+    let diffuse = Diffuse::ColorFactor([0.1, 0.2, 0.3, 1.0]);
+    let diffuse_uniform = ColorUniform::new(diffuse);
+    let diffuse_buffer = device.create_buffer_init(
+        &wgpu::util::BufferInitDescriptor {
+            label: Some("Diffuse Buffer"),
+            contents: bytemuck::cast_slice(&[diffuse_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        }
+    );
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &layouts.color,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: diffuse_buffer.as_entire_binding(),
+                }
+        ],
+        label: Some("color_bind_group"),
+    });
+
+
+    let material = Material
+    { 
+        name: "cube".to_string(),
+        diffuse,
+        bind_group, 
+    };
     
-    let mesh = Mesh{ vertex_buffer, index_buffer, num_indices }; // NEW!
-    let instances = make_instances(device); // NEW!
-    entity::Entity { mesh, material, instances: Some(instances) }
-
+    let mesh = Mesh{ name: "cube".to_string(), vertex_buffer, index_buffer, num_elements, material: 0 };
+    let instances = make_instances(device);
+    let cube = Model { meshes: vec![mesh], materials: vec![material] };
+    (cube, instances)
 }
-
-
-
-
 
 
 

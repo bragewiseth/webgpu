@@ -1,12 +1,13 @@
 // This file contains layouts for gpu input
 use crate::core::camera::Camera;
-use crate::core::model::Material;
 use crate::core::texture;
+
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum CompareFunction {
+pub enum CompareFunction 
+{
     Undefined = 0,
     Never = 1,
     Less = 2,
@@ -22,8 +23,24 @@ pub enum CompareFunction {
 
 pub trait Vertex 
 {
-    fn desc() -> wgpu::VertexBufferLayout<'static>;
+    fn desc() -> wgpu::VertexBufferLayout<'static>
+    {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<[f32;3]>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
+    }
 }
+
+
 
 pub trait Uniform 
 {
@@ -35,6 +52,7 @@ pub trait Texture
     fn desc( device : &wgpu::Device) -> wgpu::BindGroupLayout;
 }
 
+
 pub trait PushConstant 
 {
     fn desc() -> wgpu::PushConstantRange;
@@ -44,15 +62,21 @@ pub trait PushConstant
 pub trait PipelineLayout
 {
     fn new(device : &wgpu::Device, bind_group_layouts : &[&wgpu::BindGroupLayout] ) -> Self;
-    fn build_pipeline(&self, device: wgpu::Device, config: &wgpu::SurfaceConfiguration, 
-        shader: &wgpu::ShaderModule, depth_stencil: Option<wgpu::DepthStencilState>, buffers : &[wgpu::VertexBufferLayout<'static>]) -> wgpu::RenderPipeline; 
+    fn build_pipeline(
+        &self, 
+        device: &wgpu::Device, 
+        config: &wgpu::SurfaceConfiguration, 
+        shader: &wgpu::ShaderModule, 
+        depth_stencil: Option<wgpu::DepthStencilState>, 
+        buffers : &[wgpu::VertexBufferLayout<'static>]
+    ) -> wgpu::RenderPipeline; 
 }
 
 
 pub struct Framebuffer
 {
-    pub texture: texture::Texture,
-    pub bind_group: Option<wgpu::BindGroup>,
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
     pub depth_texture: Option<texture::Texture>,
 }
 
@@ -81,8 +105,10 @@ pub struct Layouts
 {
     pub camera: wgpu::BindGroupLayout,
     pub texture: wgpu::BindGroupLayout,
+    pub color: wgpu::BindGroupLayout,
     // pub light: wgpu::BindGroupLayout,
 }
+
 
 
 impl Uniform for Camera
@@ -111,14 +137,40 @@ impl Uniform for Camera
 
 
 
-impl Texture for Material
+impl Uniform for [f32; 4]
+{
+    fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
+    {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry 
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer 
+                    {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("color_bind_group_layout"),
+        })
+    }
+}
+
+
+
+impl Texture for texture::Texture
 {
     fn desc( device : &wgpu::Device) -> wgpu::BindGroupLayout
     {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
-                    binding: 1,
+                    binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         multisampled: false,
@@ -128,12 +180,9 @@ impl Texture for Material
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding: 2,
+                    binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler {
-                        comparison: false,
-                        filtering: true,
-                    },
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 }
             ],
@@ -141,8 +190,6 @@ impl Texture for Material
         })
     }
 }
-
-
 
 
 
@@ -212,12 +259,6 @@ impl Vertex for ModelVertex {
                     shader_location: 2,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 3,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-
             ],
         }
     }
@@ -240,12 +281,9 @@ impl PipelineLayout for wgpu::PipelineLayout
         )
     }
 
-
-
-
     fn build_pipeline(
         &self, 
-        device: wgpu::Device, 
+        device: &wgpu::Device, 
         config: &wgpu::SurfaceConfiguration,
         shader: &wgpu::ShaderModule, 
         depth_stencil: Option<wgpu::DepthStencilState>,
@@ -284,7 +322,7 @@ impl PipelineLayout for wgpu::PipelineLayout
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
                     polygon_mode: wgpu::PolygonMode::Fill,
-                    clamp_depth: false,
+                    unclipped_depth: false,
                     conservative: false,
                 },
                 depth_stencil,
@@ -298,8 +336,8 @@ impl PipelineLayout for wgpu::PipelineLayout
             }
         )
     }
-}
 
+}
 
 
 
@@ -309,9 +347,9 @@ impl Layouts
     pub fn new(device : &wgpu::Device) -> Self
     {
         let camera = Camera::desc(device);
-        let texture = Material::desc(device);
-        // let light = Light::desc(device);
-        Self { camera, texture }
+        let texture = texture::Texture::desc(device);
+        let color = <[f32; 4]>::desc(device);
+        Self { camera, texture, color }
     }
 }
 
@@ -319,26 +357,26 @@ impl Layouts
 
 
 
-impl Framebuffer
-{
-    pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, texture: texture::Texture) -> Self
-    {
-        // let size = winit::dpi::PhysicalSize::<u32>::from(config.extent);
-        let depth_texture = texture::Texture::create_depth_texture(device, &config, "depth_texture");
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: Some("texture_bind_group"),
-        });
-        Self { texture, depth_texture, bind_group }
-    }
-}
+// impl Framebuffer
+// {
+//     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, texture: texture::Texture) -> Self
+//     {
+//         // let size = winit::dpi::PhysicalSize::<u32>::from(config.extent);
+//         let depth_texture = texture::Texture::create_depth_texture(device, &config, "depth_texture");
+//         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+//             layout: &bind_group_layout,
+//             entries: &[
+//                 wgpu::BindGroupEntry {
+//                     binding: 0,
+//                     resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
+//                 },
+//                 wgpu::BindGroupEntry {
+//                     binding: 1,
+//                     resource: wgpu::BindingResource::Sampler(&sampler),
+//                 },
+//             ],
+//             label: Some("texture_bind_group"),
+//         });
+//         Self { texture, Some(depth_texture), Some(bind_group) }
+//     }
+// }

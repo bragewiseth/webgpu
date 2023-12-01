@@ -1,11 +1,9 @@
-use crate::components::entity;
-use crate::components::model::ModelVertex;
-use crate::components::mesh::Mesh;
-use crate::components::material::Material;
-use crate::components::texture;
-use wgpu::util::DeviceExt;
-use crate::components::entity_instancing:: { Instance, Instances };
+use crate::core::model::{Model, Mesh, Instance, Instances, Diffuse, Material, ColorUniform };
+use crate::core::pipeline::{ Layouts, ModelVertex };
+
+
 use cgmath::prelude::*;
+use wgpu::util::DeviceExt;
 
 
 
@@ -30,56 +28,8 @@ pub const INDICES: &[u16] = &[
 
 
 
-pub fn new_entity(device: &wgpu::Device, queue: &wgpu::Queue) -> entity::Entity
+pub fn new(device: &wgpu::Device,  layouts: &Layouts ) -> Model
 {
-    let diffuse_bytes = include_bytes!("../../assets/img.png");
-    let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-    let diffuse_rgba = diffuse_image.to_rgba8();
-    let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "../../assets/img.png").unwrap(); // CHANGED!
-
-    let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        // This should match the filterable field of the
-                        // corresponding Texture entry above.
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
-
-
-    let diffuse_bind_group = device.create_bind_group(
-        &wgpu::BindGroupDescriptor {
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view), // CHANGED!
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler), // CHANGED!
-                }
-            ],
-            label: Some("diffuse_bind_group"),
-        }
-    );
-
 
     let vertex_buffer = device.create_buffer_init(
         &wgpu::util::BufferInitDescriptor {
@@ -98,15 +48,40 @@ pub fn new_entity(device: &wgpu::Device, queue: &wgpu::Queue) -> entity::Entity
         }
     );
 
-    let num_indices = INDICES.len() as u32;
+    let num_elements = INDICES.len() as u32;
+
+    let diffuse = Diffuse::ColorFactor([0.1, 0.2, 0.3, 1.0]);
+    let diffuse_uniform = ColorUniform::new(diffuse);
+    let diffuse_buffer = device.create_buffer_init(
+        &wgpu::util::BufferInitDescriptor {
+            label: Some("Diffuse Buffer"),
+            contents: bytemuck::cast_slice(&[diffuse_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        }
+    );
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &layouts.color,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: diffuse_buffer.as_entire_binding(),
+                }
+        ],
+        label: Some("color_bind_group"),
+    });
 
 
-    let mesh = Mesh{ vertex_buffer, index_buffer, num_indices }; // NEW!
-    let material = Material{ diffuse_texture, diffuse_bind_group, texture_bind_group_layout, 
-        diffuse: [1.0; 4], specular: [1.0; 3], roughness: 0.0, metallic: 0.0, emissive: [0.0; 3] }; // NEW! 
-    let instances = make_instances(device); // NEW!
-    entity::Entity { mesh, material, instances: Some(instances) } // NEW!
-
+    let material = Material
+    { 
+        name: "floor".to_string(),
+        diffuse,
+        bind_group
+    };
+    
+    let mesh = Mesh{ name: "floor".to_string(), vertex_buffer, index_buffer, num_elements, material: 0 };
+    // let instances = make_instances(device);
+    let floor = Model { meshes: vec![mesh], materials: vec![material] };
+    floor
 }
 
 
