@@ -1,6 +1,5 @@
 use crate::core::texture;
 use crate::core::pipeline::{ Vertex, PipelineLayout, ModelVertex, Framebuffer, Layouts, InstanceRaw };
-// use crate::core::model::{DrawModel,  DrawLight};
 use crate::app::world;
 use crate::core::camera;
 use crate::core::pipeline;
@@ -13,7 +12,7 @@ use winit::window::CursorGrabMode;
 
 
 
-pub struct Renderer
+pub struct Engine
 { // Renderer {{{
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -33,9 +32,9 @@ pub struct Renderer
 
 
 
-impl Renderer
+impl Engine
 {
-    pub async fn new(window: Window) -> Result<Self, wgpu::SurfaceError> 
+    pub async fn new(window: Window) -> Self 
     { // new {{{
 
         // window setup {{{
@@ -66,9 +65,11 @@ impl Renderer
             &wgpu::DeviceDescriptor 
             {
                 features: wgpu::Features::empty(),
-                limits: 
-                    if cfg
-                    else { wgpu::Limits::default() },
+                limits: if cfg!(target_arch = "wasm32") {
+                    wgpu::Limits::downlevel_webgl2_defaults()
+                } else {
+                    wgpu::Limits::default()
+                },
                 label: None,
             },
             None, // Trace path
@@ -99,7 +100,7 @@ impl Renderer
         // end window setup }}}
 // pipeline setup {{{ 
         let layouts = Layouts::new(&device);
-        let world = world::World::new(&config, &device, &queue, &layouts).await;
+        let world = world::World::new(&device, &queue, &layouts).await;
 
         let pixel_pipeline : wgpu::RenderPipeline;
         let floor_pipeline : wgpu::RenderPipeline;
@@ -112,17 +113,15 @@ impl Renderer
             let floor_pipeline_layout = wgpu::PipelineLayout::new(&device, &[&layouts.camera]);
             let final_pipeline_layout = wgpu::PipelineLayout::new(&device, &[&layouts.texture]);
             pixel_pipeline = pixel_pipeline_layout.build_pipeline(&device, &config, &shader, None, [ModelVertex::desc(), InstanceRaw::desc()].as_ref());
-            floor_pipeline = floor_pipeline_layout.build_pipeline(&device, &config, &floorshader,  None, [Vertex::desc()].as_ref());
-            final_pipeline = final_pipeline_layout.build_pipeline(&device, &config, &finalshader,  None, [Vertex::desc()].as_ref());
+            floor_pipeline = floor_pipeline_layout.build_pipeline(&device, &config, &floorshader,  None, [<[f32;3]>::desc()].as_ref());
+            final_pipeline = final_pipeline_layout.build_pipeline(&device, &config, &finalshader,  None, [<[f32;3]>::desc()].as_ref());
         }
 // end pipeline setup }}}
 // framebuffer setup {{{
-        let output = surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut framebuffer = Framebuffer
+
+        let framebuffer = Framebuffer
         {
-            texture: output.texture,
-            view,
+            texture: None,
             depth_texture: Some(texture::Texture::create_depth_texture(&device, 
                 wgpu::Extent3d 
                 {
@@ -134,7 +133,7 @@ impl Renderer
                 wgpu::FilterMode::Nearest))
 
         };
-        let mut pixelframebuffer: Framebuffer;
+        let pixelframebuffer: Framebuffer;
         {
             let size = wgpu::Extent3d 
             {
@@ -143,10 +142,9 @@ impl Renderer
                 depth_or_array_layers: 1,
             };
             let texture = texture::Texture::create_blank_texture(&device, size,"low-res-texture", wgpu::FilterMode::Nearest);
-            secondframebuffer = Framebuffer
+            pixelframebuffer = Framebuffer
             {
-                texture: texture.texture,
-                view: texture.view,
+                texture: Some(texture),
                 depth_texture: None,
             }
         };
@@ -164,7 +162,7 @@ impl Renderer
         );
 
 
-        let renderer = Self
+        Self
         {
             surface,
             device,
@@ -180,9 +178,7 @@ impl Renderer
             pixelframebuffer,
             world,
             mouse_locked: false,
-        };
-        Ok(renderer)
-
+        }
     } // end new }}}
 
 
@@ -283,8 +279,8 @@ impl Renderer
 
     pub fn update(&mut self, dt: instant::Duration)
     { // update {{{
-        self.camera.controller.update_camera(&mut self.camera, dt);
-        self.camera.uniform.update_view_proj(&self.camera, &self.camera.projection);
+        self.camera.update_camera(dt);
+        self.camera.update_view_proj();
         self.queue.write_buffer(&self.camera.buffer, 0, bytemuck::cast_slice(&[self.camera.uniform]));
     } // end update }}}
 
@@ -292,6 +288,9 @@ impl Renderer
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> 
     { // render {{{
+
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(
             &wgpu::CommandEncoderDescriptor 
             {
@@ -306,7 +305,7 @@ impl Renderer
                     color_attachments: &[Some(
                         wgpu::RenderPassColorAttachment 
                         {
-                            view: &self.framebuffer.view,
+                            view: &view,
                             resolve_target: None,
                             ops: wgpu::Operations 
                             {
@@ -336,19 +335,19 @@ impl Renderer
                     occlusion_query_set: None,
                 }
             );
-            render_pass.set_pipeline(&self.pixel_pipeline);
-            render_pass.set_bind_group(0, &self.world.entities[1].material.diffuse_bind_group, &[]); // NEW!
-            render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.world.entities[1].mesh.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.world.entities[1].instances.as_ref().unwrap().instance_buffer.slice(..));
-            render_pass.set_index_buffer(self.world.entities[1].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.world.entities[1].mesh.num_indices, 0, 0..1 as _);
-            render_pass.set_pipeline(&self.floor_pipeline);
-            render_pass.set_bind_group(0, &self.world.entities[0].material.diffuse_bind_group, &[]); // NEW!
-            render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.world.entities[0].mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.world.entities[0].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.world.entities[0].mesh.num_indices, 0, 0..1 as _);
+            render_pass.set_pipeline(&self.final_pipeline);
+            render_pass.set_bind_group(0, &self.world.cube.materials[0].bind_group, &[]); // NEW!
+            render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.world.cube.meshes[0].vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.world.cube_instances.instance_buffer.slice(..));
+            render_pass.set_index_buffer(self.world.cube.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.world.cube.meshes[0].num_elements, 0, 0..1 as _);
+            // render_pass.set_pipeline(&self.floor_pipeline);
+            // render_pass.set_bind_group(0, &self.world.entities[0].material.diffuse_bind_group, &[]); // NEW!
+            // render_pass.set_bind_group(1, &self.world.camera.camera_bind_group, &[]);
+            // render_pass.set_vertex_buffer(0, self.world.entities[0].mesh.vertex_buffer.slice(..));
+            // render_pass.set_index_buffer(self.world.entities[0].mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            // render_pass.draw_indexed(0..self.world.entities[0].mesh.num_indices, 0, 0..1 as _);
         }  
         // {
         //     let mut render_pass = encoder.begin_render_pass(
@@ -381,7 +380,7 @@ impl Renderer
         // }
         //
         self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        Some(self.surface.get_current_texture()?);
 
         Ok(())
     } // end render }}}

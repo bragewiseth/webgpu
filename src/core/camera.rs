@@ -1,3 +1,6 @@
+use crate::core::pipeline::Uniform;
+
+
 use cgmath::*;
 use wgpu::util::DeviceExt;
 use winit::event::*;
@@ -5,7 +8,6 @@ use winit::dpi::PhysicalPosition;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 
-use crate::pipeline::Uniform;
 
 
 
@@ -30,6 +32,7 @@ pub struct Camera {
     pub buffer : wgpu::Buffer,
     pub uniform: CameraUniform,
     pub controller: CameraController,
+    pub projection: Projection,
 }
 
 
@@ -59,10 +62,8 @@ impl Camera {
         );
 
 
-
-
         let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Uniform::<Camera>::desc(device),
+            layout: &Camera::desc(device),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -73,6 +74,9 @@ impl Camera {
         });
 
 
+
+
+
         let mut cam = Self {
             position: position.into(),
             yaw: yaw.into(),
@@ -81,16 +85,50 @@ impl Camera {
             buffer: camera_buffer,
             uniform: camera_uniform,
             controller,
+            projection,
         };
-        camera_uniform.update_view_proj(&cam, &projection);
-        cam.uniform = camera_uniform;
+        cam.update_view_proj();
         cam
 
     }
 
+    pub fn update_view_proj(&mut self) {
+        self.uniform.view_position = self.position.to_homogeneous().into();
+        self.uniform.view_proj = (self.projection.calc_matrix() * self.calc_matrix()).into();
+    }
 
 
+    pub fn update_camera(&mut self , dt: Duration) {
+        let dt = dt.as_secs_f32();
 
+        // Move forward/backward and left/right
+        let (yaw_sin, yaw_cos) = self.yaw.0.sin_cos();
+        let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
+        let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
+        self.position += forward * (self.controller.amount_forward - self.controller.amount_backward) * self.controller.speed * dt;
+        self.position += right * (self.controller.amount_right - self.controller.amount_left) * self.controller.speed * dt;
+
+        let (pitch_sin, pitch_cos) = self.pitch.0.sin_cos();
+        let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
+        self.position += scrollward * self.controller.scroll * self.controller.speed * self.controller.sensitivity * dt;
+        self.controller.scroll = 0.0;
+
+
+        self.position.z += (self.controller.amount_up - self.controller.amount_down) * self.controller.speed * dt;
+
+        self.yaw += Rad(self.controller.rotate_horizontal) * self.controller.sensitivity * dt;
+        self.pitch += Rad(-self.controller.rotate_vertical) * self.controller.sensitivity * dt;
+
+
+        self.controller.rotate_horizontal = 0.0;
+        self.controller.rotate_vertical = 0.0;
+
+        if self.pitch < -Rad(SAFE_FRAC_PI_2) {
+            self.pitch = -Rad(SAFE_FRAC_PI_2);
+        } else if self.pitch > Rad(SAFE_FRAC_PI_2) {
+            self.pitch = Rad(SAFE_FRAC_PI_2);
+        }
+    }
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
         let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
@@ -109,6 +147,7 @@ impl Camera {
 }
 
 
+#[derive(Debug)]
 pub struct Projection {
     aspect: f32,
     fovy: Rad<f32>,
@@ -221,38 +260,6 @@ impl CameraController {
             }) => *scroll as f32,
         };
     }
-
-    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
-        let dt = dt.as_secs_f32();
-
-        // Move forward/backward and left/right
-        let (yaw_sin, yaw_cos) = camera.yaw.0.sin_cos();
-        let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
-        let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
-        camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-        camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
-
-        let (pitch_sin, pitch_cos) = camera.pitch.0.sin_cos();
-        let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
-        camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
-        self.scroll = 0.0;
-
-
-        camera.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
-
-        camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;
-        camera.pitch += Rad(-self.rotate_vertical) * self.sensitivity * dt;
-
-
-        self.rotate_horizontal = 0.0;
-        self.rotate_vertical = 0.0;
-
-        if camera.pitch < -Rad(SAFE_FRAC_PI_2) {
-            camera.pitch = -Rad(SAFE_FRAC_PI_2);
-        } else if camera.pitch > Rad(SAFE_FRAC_PI_2) {
-            camera.pitch = Rad(SAFE_FRAC_PI_2);
-        }
-    }
 }
 
 
@@ -275,11 +282,6 @@ impl CameraUniform {
             view_proj: cgmath::Matrix4::identity().into(),
             view_position: [0.0; 4],
         }
-    }
-
-    pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
-        self.view_position = camera.position.to_homogeneous().into();
-        self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
     }
 }
 

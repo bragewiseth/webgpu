@@ -1,10 +1,15 @@
+use crate::core::model;
+use crate::core::pipeline;
+use crate::core::texture;
+
+
 
 use std::io::{BufReader, Cursor};
-
 use cfg_if::cfg_if;
 use wgpu::util::DeviceExt;
 
-use crate::components::{model, texture};
+
+
 
 #[cfg(target_arch = "wasm32")]
 fn format_url(file_name: &str) -> reqwest::Url {
@@ -116,7 +121,7 @@ pub async fn load_model(
 
         materials.push(model::Material {
             name: m.name,
-            diffuse_texture,
+            diffuse: model::Diffuse::Texture(diffuse_texture),
             bind_group,
         })
     }
@@ -125,7 +130,7 @@ pub async fn load_model(
         .into_iter()
         .map(|m| {
             let vertices = (0..m.mesh.positions.len() / 3)
-                .map(|i| model::ModelVertex {
+                .map(|i| pipeline::ModelVertex {
                     position: [
                         m.mesh.positions[i * 3],
                         m.mesh.positions[i * 3 + 1],

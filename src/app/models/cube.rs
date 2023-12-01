@@ -57,22 +57,7 @@ const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3 { x: 5.0, y:
 pub fn new(device: &wgpu::Device,  layouts: &Layouts ) -> (Model, Instances)
 {
 
-    // let diffuse_bind_group = device.create_bind_group(
-    //     &wgpu::BindGroupDescriptor {
-    //         layout: &texture_bind_group_layout,
-    //         entries: &[
-    //             wgpu::BindGroupEntry {
-    //                 binding: 0,
-    //                 resource: wgpu::BindingResource::TextureView(&diffuse_texture.view), // CHANGED!
-    //             },
-    //             wgpu::BindGroupEntry {
-    //                 binding: 1,
-    //                 resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler), // CHANGED!
-    //             }
-    //         ],
-    //         label: Some("diffuse_bind_group"),
-    //     }
-    // );
+
 
     let vertex_buffer = device.create_buffer_init(
         &wgpu::util::BufferInitDescriptor {
@@ -89,26 +74,47 @@ pub fn new(device: &wgpu::Device,  layouts: &Layouts ) -> (Model, Instances)
         }
     );
     let num_elements = INDICES.len() as u32;
-    let diffuse = Diffuse::ColorFactor([0.1, 0.2, 0.3, 1.0]);
-    let diffuse_uniform = ColorUniform::new(diffuse);
-    let diffuse_buffer = device.create_buffer_init(
-        &wgpu::util::BufferInitDescriptor {
-            label: Some("Diffuse Buffer"),
-            contents: bytemuck::cast_slice(&[diffuse_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    // let diffuse = Diffuse::ColorFactor(ColorUniform::new([0.1, 0.2, 0.3, 1.0]));
+    // let diffuse_uniform = diffuse.to_uniform();
+    // let diffuse_buffer = device.create_buffer_init(
+    //     &wgpu::util::BufferInitDescriptor {
+    //         label: Some("Diffuse Buffer"),
+    //         contents: bytemuck::cast_slice(&[diffuse_uniform]),
+    //         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    //     }
+    // );
+    // let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    //     layout: &layouts.color,
+    //     entries: &[
+    //         wgpu::BindGroupEntry {
+    //             binding: 0,
+    //             resource: diffuse_buffer.as_entire_binding(),
+    //             }
+    //     ],
+    //     label: Some("color_bind_group"),
+    // });
+    
+    let diffuse_bytes = include_bytes!("../../assets/cube.png");
+    let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
+    let diffuse_rgba = diffuse_image.as_rgba8().unwrap();
+    let diffuse_texture = texture::Texture::from_image(&device, &diffuse_rgba, "cube").unwrap();
+
+    let diffuse_bind_group = device.create_bind_group(
+        &wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view), // CHANGED!
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler), // CHANGED!
+                }
+            ],
+            label: Some("diffuse_bind_group"),
         }
     );
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &layouts.color,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: diffuse_buffer.as_entire_binding(),
-                }
-        ],
-        label: Some("color_bind_group"),
-    });
-
 
     let material = Material
     { 

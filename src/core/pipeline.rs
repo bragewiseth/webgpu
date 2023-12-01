@@ -3,22 +3,21 @@ use crate::core::camera::Camera;
 use crate::core::texture;
 
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum CompareFunction 
-{
-    Undefined = 0,
-    Never = 1,
-    Less = 2,
-    Equal = 3,
-    LessEqual = 4,
-    Greater = 5,
-    NotEqual = 6,
-    GreaterEqual = 7,
-    Always = 8,
-}
-
+// #[repr(C)]
+// #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+// #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// pub enum CompareFunction 
+// {
+//     Undefined = 0,
+//     Never = 1,
+//     Less = 2,
+//     Equal = 3,
+//     LessEqual = 4,
+//     Greater = 5,
+//     NotEqual = 6,
+//     GreaterEqual = 7,
+//     Always = 8,
+// }
 
 
 pub trait Vertex 
@@ -39,6 +38,8 @@ pub trait Vertex
         }
     }
 }
+
+impl Vertex for [f32; 3] {}
 
 
 
@@ -75,8 +76,7 @@ pub trait PipelineLayout
 
 pub struct Framebuffer
 {
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
+    pub texture: Option<texture::Texture>,
     pub depth_texture: Option<texture::Texture>,
 }
 

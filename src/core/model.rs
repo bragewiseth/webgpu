@@ -46,7 +46,7 @@ pub struct Material
 
 pub enum Diffuse
 {
-    ColorFactor([f32; 4]),
+    ColorFactor(ColorUniform),
     Texture(texture::Texture),
 }
 
@@ -80,17 +80,24 @@ pub struct Model
 
 impl ColorUniform 
 {
-    pub fn new(color : Diffuse ) -> Self 
+    pub fn new(color: [f32;4] ) -> Self 
     {
-        match color 
-        {
-            Diffuse::ColorFactor(color) => Self { color },
-            Diffuse::Texture(_) => Self { color: [1.0; 4] },
-        }
-
+        Self { color }
     }
 }
 
+
+impl Diffuse 
+{
+    pub fn to_uniform(&self) -> ColorUniform 
+    {
+        match self 
+        {
+            Diffuse::ColorFactor(color) => *color,
+            Diffuse::Texture(_) => ColorUniform::new([0.0, 0.0, 0.0, 0.0]),
+        }
+    }
+}
 
 
 

@@ -50,8 +50,8 @@ pub fn new(device: &wgpu::Device,  layouts: &Layouts ) -> Model
 
     let num_elements = INDICES.len() as u32;
 
-    let diffuse = Diffuse::ColorFactor([0.1, 0.2, 0.3, 1.0]);
-    let diffuse_uniform = ColorUniform::new(diffuse);
+    let diffuse = Diffuse::ColorFactor(ColorUniform::new([0.1, 0.2, 0.3, 1.0]));
+    let diffuse_uniform = diffuse.to_uniform();
     let diffuse_buffer = device.create_buffer_init(
         &wgpu::util::BufferInitDescriptor {
             label: Some("Diffuse Buffer"),

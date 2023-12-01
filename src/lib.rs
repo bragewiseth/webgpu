@@ -18,10 +18,8 @@ use winit::
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
-    window::CursorGrabMode,
 };
 
-use crate::app::renderer;
 
 
 
@@ -68,7 +66,7 @@ pub async fn run()
 
     // Window setup...
 
-    let mut state = renderer::Renderer::new(window).await;
+    let mut state = app::engine::Engine::new(window).await;
     let mut last_render_time = instant::Instant::now();  // NEW!
     // Event loop...
 
