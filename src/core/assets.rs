@@ -1,5 +1,5 @@
 use crate::core::model;
-use crate::core::pipeline;
+use crate::core::renderer;
 use crate::core::texture;
 
 
@@ -16,14 +16,15 @@ fn format_url(file_name: &str) -> reqwest::Url {
     let window = web_sys::window().unwrap();
     let location = window.location();
     let mut origin = location.origin().unwrap();
-    if !origin.ends_with("learn-wgpu") {
-        origin = format!("{}/learn-wgpu", origin);
+    if !origin.ends_with("webgpu") {
+        origin = format!("{}/webgpu", origin);
     }
     let base = reqwest::Url::parse(&format!("{}/", origin,)).unwrap();
     base.join(file_name).unwrap()
 }
 
 pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
+    println!("Loading {:?}", file_name);
     cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
             let url = format_url(file_name);
@@ -33,16 +34,16 @@ pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
                 .await?;
         } else {
             let path = std::path::Path::new(env!("OUT_DIR"))
-                .join("res")
+                .join("assets")
                 .join(file_name);
             let txt = std::fs::read_to_string(path)?;
         }
     }
-
     Ok(txt)
 }
 
 pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
+    println!("Loading {:?}", file_name);
     cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
             let url = format_url(file_name);
@@ -53,12 +54,11 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
                 .to_vec();
         } else {
             let path = std::path::Path::new(env!("OUT_DIR"))
-                .join("res")
+                .join("assets")
                 .join(file_name);
             let data = std::fs::read(path)?;
         }
     }
-
     Ok(data)
 }
 
@@ -100,7 +100,8 @@ pub async fn load_model(
         },
     )
     .await?;
-
+    println!("# of models: {}", models.len());
+    println!("# of materials: {:?}", obj_materials);
     let mut materials = Vec::new();
     for m in obj_materials? {
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
@@ -121,22 +122,22 @@ pub async fn load_model(
 
         materials.push(model::Material {
             name: m.name,
-            diffuse: model::Diffuse::Texture(diffuse_texture),
+            diffuse_texture,
+            diffuse_color: model::Color {color : m.diffuse },
             bind_group,
         })
     }
-
     let meshes = models
         .into_iter()
         .map(|m| {
             let vertices = (0..m.mesh.positions.len() / 3)
-                .map(|i| pipeline::ModelVertex {
+                .map(|i| renderer::ModelVertex {
                     position: [
                         m.mesh.positions[i * 3],
                         m.mesh.positions[i * 3 + 1],
                         m.mesh.positions[i * 3 + 2],
                     ],
-                    tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
+                    uv: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
                     normal: [
                         m.mesh.normals[i * 3],
                         m.mesh.normals[i * 3 + 1],

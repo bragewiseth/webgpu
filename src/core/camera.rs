@@ -1,4 +1,4 @@
-use crate::core::pipeline::Uniform;
+use crate::core::renderer::Resource;
 
 
 use cgmath::*;
@@ -51,7 +51,7 @@ impl Camera {
     ) -> Self
     {
         
-        let mut camera_uniform = CameraUniform::new();
+        let camera_uniform = CameraUniform::new();
 
         let camera_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {

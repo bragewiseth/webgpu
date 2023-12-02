@@ -9,7 +9,7 @@ struct CameraUniform
 };
 
 
-@group(1) @binding(0) // 1.
+@group(0) @binding(0) // 1.
 var<uniform> camera: CameraUniform;
 // Vertex shader
 
@@ -20,9 +20,8 @@ var<uniform> camera: CameraUniform;
 struct VertexInput 
 {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
+    @location(1) uv: vec2<f32>,
     @location(2) normal: vec3<f32>,
-    //@location(3) color: vec3<f32>,
 }
 
 struct InstanceInput 
@@ -36,7 +35,7 @@ struct InstanceInput
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) tex_coords: vec2<f32>,
+    @location(0) uv: vec2<f32>,
     @location(1) color: vec3<f32>,
 }
 
@@ -54,18 +53,18 @@ fn vs_main( model: VertexInput, instance: InstanceInput) -> VertexOutput {
 
 
     var out: VertexOutput;
-    //out.color = model.color;
-    out.tex_coords = model.tex_coords;
+    out.uv = model.uv;
     out.clip_position =  camera.view_proj * model_matrix *  vec4<f32>(model.position, 1.0);
+    out.color = model.normal;
     return out;
 }
 
 
 
 
-@group(0) @binding(0)
+@group(1) @binding(0)
 var t_diffuse: texture_2d<f32>;
-@group(0)@binding(1)
+@group(1)@binding(1)
 var s_diffuse: sampler;
 
 
