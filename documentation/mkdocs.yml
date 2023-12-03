@@ -1,0 +1,53 @@
+site_name: Renderer
+
+nav:
+  - Home: index.md
+
+  - API: 
+      - API/index.md
+      - Renerere: API/renderer.md
+
+  - Wiki:
+      - wiki/index.md
+      - Pixel: wiki/pixelrenderer.md
+
+  - About: 
+      - Coding conventions: about/conventions.md
+
+  - Devlog:
+    - devlog/index.md
+
+
+
+
+theme:
+  name: material
+  features:
+    - navigation.indexes 
+  highlightjs: true
+  font:
+    text: DM Sans
+    code: DM Mono Medium
+  palette:
+    scheme: slate
+    primary: black
+    accent: teal
+
+
+
+plugins:
+  - blog:
+      enabled: true
+      blog_dir: devlog
+      blog_toc: true
+  - search
+
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences

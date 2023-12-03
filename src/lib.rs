@@ -1,6 +1,5 @@
-pub mod state;
-pub mod components;
-pub mod instances;
+pub mod app;
+pub mod core;
 // mod shaders;
 // use winit::window::Window;
 
@@ -19,8 +18,8 @@ use winit::
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
-    window::CursorGrabMode,
 };
+
 
 
 
@@ -50,10 +49,7 @@ pub async fn run()
 
     #[cfg(target_arch = "wasm32")]
     {
-        // Winit prevents sizing with CSS, so we have to set
-        // the size manually when on web.
         use winit::dpi::PhysicalSize;
-        // fullscreen
         window.set_inner_size(PhysicalSize::new(1200, 1000));
 
         use winit::platform::web::WindowExtWebSys;
@@ -70,7 +66,7 @@ pub async fn run()
 
     // Window setup...
 
-    let mut state = state::State::new(window).await;
+    let mut state = app::engine::Engine::new(window).await;
     let mut last_render_time = instant::Instant::now();  // NEW!
     // Event loop...
 
@@ -114,7 +110,7 @@ pub async fn run()
                 let now = instant::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                state.update(dt);
+                state.update(dt, last_render_time);
                 match state.render() 
                 {
                     Ok(_) => {}
