@@ -207,7 +207,7 @@ impl Engine
                 &finalshader,
                 false,
                 vec![PipelineResources::Material],
-                vec![PipelineBuffers::VertexOnly],
+                vec![PipelineBuffers::Model],
                 &layouts,
                 Some("final_pipeline_layout"));
         }
@@ -357,6 +357,26 @@ impl Engine
             {
                 width: self.config.width,
                 height: self.config.height,
+                depth_or_array_layers: 1,
+            },
+            "depth_texture",
+            wgpu::FilterMode::Linear));
+
+        self.pixelframebuffer.texture = Some(Texture::create_blank_texture(&self.device, 
+            wgpu::Extent3d 
+            {
+                width: self.config.width / 4,
+                height: self.config.height / 4,
+                depth_or_array_layers: 1,
+            },
+            "high-res-texture",
+            wgpu::FilterMode::Linear));
+        
+        self.pixelframebuffer.depth_texture = Some(Texture::create_depth_texture(&self.device,
+            wgpu::Extent3d 
+            {
+                width: self.config.width / 4,
+                height: self.config.height / 4,
                 depth_or_array_layers: 1,
             },
             "depth_texture",

@@ -7,11 +7,11 @@ use std::ops::Range;
 use wgpu::util::DeviceExt;
 
 
-pub const SCREENQUAD: [VertexOnly; 4] = [
-    VertexOnly { position: [-1.0, -1.0, 0.0] },
-    VertexOnly { position: [-1.0,  1.0, 0.0] },
-    VertexOnly { position: [ 1.0, -1.0, 0.0] },
-    VertexOnly { position: [ 1.0,  1.0, 0.0] },
+pub const SCREENQUAD: [ModelVertex; 4] = [
+    ModelVertex { position: [-1.0, -1.0, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 0.0] },
+    ModelVertex { position: [-1.0,  1.0, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
+    ModelVertex { position: [ 1.0, -1.0, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+    ModelVertex { position: [ 1.0,  1.0, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 0.0] },
 ];
 pub const SCREENQUAD_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
 
