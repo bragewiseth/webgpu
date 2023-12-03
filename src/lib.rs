@@ -110,7 +110,7 @@ pub async fn run()
                 let now = instant::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                state.update(dt);
+                state.update(dt, last_render_time);
                 match state.render() 
                 {
                     Ok(_) => {}

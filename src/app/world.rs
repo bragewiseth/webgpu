@@ -18,7 +18,6 @@ pub struct World
     pub plane: Mesh,
 }
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
 
 
 
@@ -28,7 +27,7 @@ impl World
     {
         let mat_bind_group_layout = &layouts.material;
 
-        let sphere = assets::load_model("sphere.obj", device, queue, mat_bind_group_layout)
+        let sphere = assets::load_model("sphere1.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
         
@@ -36,7 +35,7 @@ impl World
             .await
             .unwrap();
 
-        let cube = assets::load_model("cube.obj", device, queue, mat_bind_group_layout)
+        let cube = assets::load_model("cube1.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
 
@@ -55,24 +54,19 @@ impl World
 
 
 
-        const SPACE_BETWEEN: f32 = 3.0;
-        let sphere_instances = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
-            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+        const SPACE_BETWEEN: f32 = 10.0;
+        let sphere_instances = (0..3).map(|x| {
+                let x = SPACE_BETWEEN * (x as f32 - 3 as f32 / 2.0);
 
-                let position = cgmath::Vector3 { x, y: 0.0, z } + cgmath::Vector3 { x: 0.0, y: 0.0, z: 20.0 }; 
+                let position = cgmath::Vector3 { x, y: 0.0, z:5.0 } ;
 
                 let rotation = if position.is_zero() {
                     cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
                 } else {
                     cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
                 };
-
-                Instance {
-                    position, rotation,
-                }
-            })
+                let scale = cgmath::Vector3 { x: 1.0, y: 1.0, z: 1.0 };
+                Instance { position, rotation, scale }
         }).collect::<Vec<_>>();
 
 
@@ -81,27 +75,30 @@ impl World
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
             }
         );
         let sphere_instances = Instances{ instances: sphere_instances, buffer };
+        let sphere_x : [f32; 3] = [0.0, 10.0, 20.0];
+        let sphere_y : [f32; 3] = [0.0, 0.0, 0.0];
 
+        const NUM_INSTANCES_PER_SHPERE: u32 = 3;
+        let cube_instances = (0..NUM_INSTANCES_PER_SHPERE).flat_map(|x| {
+            (0..NUM_INSTANCES_PER_SHPERE).map(move |y| {
 
-        let cube_instances = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
-            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                let x = sphere_x[x as usize] + 2.0 * (x as f32 - NUM_INSTANCES_PER_SHPERE as f32); 
+                let y = sphere_y[y as usize] + 2.0 * (y as f32 - NUM_INSTANCES_PER_SHPERE as f32);
 
-                let position = cgmath::Vector3 { x, y: 0.0, z } + cgmath::Vector3 { x: 0.0, y: 0.0, z: 20.0 }; 
+                let position = cgmath::Vector3 { x, y, z: 5.0 };
 
                 let rotation = if position.is_zero() {
                     cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
                 } else {
                     cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
                 };
-
+                let scale = cgmath::Vector3 { x: 1.0, y: 0.2, z: 0.2 };
                 Instance {
-                    position, rotation,
+                    position, rotation, scale
                 }
             })
         }).collect::<Vec<_>>();
@@ -111,7 +108,7 @@ impl World
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
             }
         );
 

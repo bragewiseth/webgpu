@@ -1,7 +1,8 @@
-use std::alloc::Layout;
-
 use crate::app::world;
-use crate::core::model::Material;
+use crate::core::model::{
+    Material,
+    Instance,
+};
 use crate::core::texture::Texture;
 use crate::core::camera::{ 
     Camera, 
@@ -34,10 +35,10 @@ pub struct Engine
     pub size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     camera: Camera,
+    layouts: BindGroupLayouts,
     pixel_pipeline : RenderPipeline,
     floor_pipeline : RenderPipeline,
     final_pipeline : RenderPipeline,
-    framebuffer : Framebuffer,
     pixelframebuffer : Framebuffer,
     world : world::World,
     mouse_locked: bool
@@ -116,37 +117,12 @@ impl Engine
 
         // end window setup }}}
 
-// framebuffer setup {{{
         let layouts = BindGroupLayouts
         {
             camera: Camera::desc(&device),
             material: Material::desc(&device),
         };
-        let framebuffer : Framebuffer;
-        {
-            let size = wgpu::Extent3d 
-            {
-                width: config.width,
-                height: config.height,
-                depth_or_array_layers: 1,
-            };
-            let texture = Texture::create_blank_texture(&device, size,"high-res-texture", wgpu::FilterMode::Linear);
-            let bind_group = Some(Framebuffer::make_bind_group(&device, &layouts, &texture));
-            framebuffer = Framebuffer
-            {
-                texture: Some(texture),
-                depth_texture: Some(Texture::create_depth_texture(&device, 
-                wgpu::Extent3d 
-                {
-                    width: config.width ,
-                    height: config.height,
-                    depth_or_array_layers: 1,
-                },
-                "depth_texture",
-                wgpu::FilterMode::Linear)),
-                bind_group,
-            }       
-        };
+
 
         let pixelframebuffer: Framebuffer;
         {
@@ -173,8 +149,6 @@ impl Engine
                 bind_group,
             }
         };
-// end framebuffer setup }}}
-// pipeline setup {{{ 
         let pixel_pipeline : RenderPipeline;
         let floor_pipeline : RenderPipeline;
         let final_pipeline : RenderPipeline;
@@ -196,7 +170,7 @@ impl Engine
                 &device, 
                 &config,
                 &floorshader,
-                true,
+                false,
                 vec![PipelineResources::Camera],
                 vec![PipelineBuffers::VertexOnly],
                 &layouts,
@@ -206,12 +180,11 @@ impl Engine
                 &config,
                 &finalshader,
                 false,
-                vec![PipelineResources::Material],
+                vec![ PipelineResources::Material],
                 vec![PipelineBuffers::Model],
                 &layouts,
                 Some("final_pipeline_layout"));
         }
-// end pipeline setup }}}
 
 
 
@@ -237,10 +210,10 @@ impl Engine
             size,
             window,
             camera,
+            layouts,
             pixel_pipeline,
             floor_pipeline,
             final_pipeline,
-            framebuffer,
             pixelframebuffer,
             world,
             mouse_locked: false,
@@ -264,16 +237,28 @@ impl Engine
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-            self.framebuffer.depth_texture = Some(Texture::create_depth_texture(&self.device, 
+            self.camera.projection.resize(new_size.width, new_size.height);
+            self.pixelframebuffer.texture = Some(Texture::create_blank_texture(&self.device, 
                 wgpu::Extent3d 
                 {
-                    width: self.config.width,
-                    height: self.config.height,
+                    width: self.config.width / 4,
+                    height: self.config.height / 4,
+                    depth_or_array_layers: 1,
+                },
+                "high-res-texture",
+                wgpu::FilterMode::Nearest));
+
+            self.pixelframebuffer.depth_texture = Some(Texture::create_depth_texture(&self.device,
+                wgpu::Extent3d 
+                {
+                    width: self.config.width / 4,
+                    height: self.config.height / 4,
                     depth_or_array_layers: 1,
                 },
                 "depth_texture",
                 wgpu::FilterMode::Nearest));
-            self.camera.projection.resize(new_size.width, new_size.height);
+            
+            self.pixelframebuffer.bind_group = Some(Framebuffer::make_bind_group(&self.device, &self.layouts, self.pixelframebuffer.texture.as_ref().unwrap()));
         }
     } // end resize }}}
 
@@ -318,12 +303,12 @@ impl Engine
             } => 
             { 
                 self.camera.controller.process_keyboard(*key, *state);
-                self.window.set_title(&format!("{:?}", self.camera.position));
+                // self.window.set_title(&format!("{:?}", self.camera.position));
                 true
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.camera.controller.process_scroll(delta);
-                self.window.set_title(&format!("{:?}", self.camera.position));
+                // self.window.set_title(&format!("{:?}", self.camera.position));
                 true
             }
             _ => false,
@@ -347,43 +332,18 @@ impl Engine
 
 
 // update {{{
-    pub fn update(&mut self, dt: instant::Duration)
+    pub fn update(&mut self, dt: instant::Duration, time: instant::Instant)
     { 
+        let t = time.elapsed().as_secs_f32();
         self.camera.update_camera(dt);
         self.camera.update_view_proj();
         self.queue.write_buffer(&self.camera.buffer, 0, bytemuck::cast_slice(&[self.camera.uniform]));
-        self.framebuffer.depth_texture = Some(Texture::create_depth_texture(&self.device, 
-            wgpu::Extent3d 
-            {
-                width: self.config.width,
-                height: self.config.height,
-                depth_or_array_layers: 1,
-            },
-            "depth_texture",
-            wgpu::FilterMode::Linear));
 
-        self.pixelframebuffer.texture = Some(Texture::create_blank_texture(&self.device, 
-            wgpu::Extent3d 
-            {
-                width: self.config.width / 4,
-                height: self.config.height / 4,
-                depth_or_array_layers: 1,
-            },
-            "high-res-texture",
-            wgpu::FilterMode::Linear));
-        
-        self.pixelframebuffer.depth_texture = Some(Texture::create_depth_texture(&self.device,
-            wgpu::Extent3d 
-            {
-                width: self.config.width / 4,
-                height: self.config.height / 4,
-                depth_or_array_layers: 1,
-            },
-            "depth_texture",
-            wgpu::FilterMode::Nearest));
-
-        self.world.sphere_instances.instances[0].position = cgmath::Vector3::new(1.0, 0.0, 0.0) * (dt.as_secs_f32() * 0.5).sin() * 10.0;
-        // self.queue.write_buffer(&self.world.sphere_instances.buffer, 0, &self.world.sphere_instances.instances );
+        self.world.sphere_instances.instances[0].position = cgmath::Vector3::new(0.0, 0.0, t * 1.0); 
+        let instance_data = self.world.sphere_instances.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        self.queue.write_buffer(&self.world.sphere_instances.buffer, 0, bytemuck::cast_slice(&instance_data));
+        println!("{:?}", self.world.sphere_instances.instances[0].position);
+        println!("{:?}", t);
     } // end update }}}
 
 
@@ -410,7 +370,8 @@ impl Engine
                             view: &self.pixelframebuffer.texture.as_ref().unwrap().view,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.15, g: 0.15, b: 0.15, a: 1.0, }   ),
+                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 1.0, g: 1.0, b: 1.0, a: 0.0, }   ),
+                                // load : wgpu::LoadOp::Load,
                                 store: wgpu::StoreOp::Store,
                             },
                         }
@@ -427,19 +388,15 @@ impl Engine
                     occlusion_query_set: None,
                 }
             );
-            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube, &self.world.sphere_instances, 0..1,
-                &self.camera.bind_group );
-            render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..9);
-            render_pass.set_pipeline(&self.floor_pipeline.pipeline);
-            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
-            render_pass.draw_mesh(&self.world.floor);
+            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube, &self.world.cube_instances, 0..9, &self.camera.bind_group );
+            render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..3);
 
         }
         {
             let mut render_pass = encoder.begin_render_pass(
                 &wgpu::RenderPassDescriptor 
                 {
-                    label: Some("Floor Pass"),
+                    label: Some("Final Pass"),
                     color_attachments: &[Some(
                         wgpu::RenderPassColorAttachment 
                         {
@@ -447,7 +404,8 @@ impl Engine
                             resolve_target: None,
                             ops: wgpu::Operations 
                             {
-                                load: wgpu::LoadOp::Load,
+                                // load: wgpu::LoadOp::Load,
+                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.8, g: 0.7, b: 0.9, a: 1.0, }   ),
                                 store: wgpu::StoreOp::Store,
                             },
                         }
@@ -457,37 +415,13 @@ impl Engine
                     occlusion_query_set: None,
                 }
             );
+            render_pass.set_pipeline(&self.floor_pipeline.pipeline);
+            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            render_pass.draw_mesh(&self.world.floor);
             render_pass.set_pipeline(&self.final_pipeline.pipeline);
             render_pass.set_bind_group(0, &self.pixelframebuffer.bind_group.as_ref().unwrap(), &[]);
-            render_pass.draw_mesh(&self.world.plane);
+            render_pass.draw_mesh(&self.world.plane);            
         }
-        // {
-        //     let mut render_pass = encoder.begin_render_pass(
-        //         &wgpu::RenderPassDescriptor 
-        //         {
-        //             label: Some("Final Pass"),
-        //             color_attachments: &[Some(
-        //                 wgpu::RenderPassColorAttachment 
-        //                 {
-        //                     view: &view,
-        //                     resolve_target: None,
-        //                     ops: wgpu::Operations 
-        //                     {
-        //                         load: wgpu::LoadOp::Load,
-        //                         store: wgpu::StoreOp::Store,
-        //                     },
-        //                 }
-        //             )],
-        //             depth_stencil_attachment: None,
-        //             timestamp_writes: None,
-        //             occlusion_query_set: None,
-        //         }
-        //     );
-        //     render_pass.set_pipeline(&self.final_pipeline);
-            // render_pass.set_bind_group(0, &self.pixelframebuffer.bind_group.as_ref().unwrap(), &[]);
-            // render_pass.set_bind_group(1, &self.framebuffer.bind_group.as_ref().unwrap(), &[]);
-            // render_pass.draw_mesh(&self.world.plane);
-        // }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 

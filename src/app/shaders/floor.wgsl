@@ -47,7 +47,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let white = vec3<f32>(0.05, 0.05, 0.05);
     let black = vec3<f32>(0.08, 0.08, 0.08);
-
+    
+    let r = length(in.vertex_pos) * 0.05;
     let x = floor(in.vertex_pos.x * 0.1);
     let y = floor(in.vertex_pos.y * 0.1);
     let checker = abs(x + y) % 2.0; // Alternates between 0 and 1

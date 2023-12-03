@@ -8,10 +8,10 @@ use wgpu::util::DeviceExt;
 
 
 pub const SCREENQUAD: [ModelVertex; 4] = [
-    ModelVertex { position: [-1.0, -1.0, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 0.0] },
-    ModelVertex { position: [-1.0,  1.0, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-    ModelVertex { position: [ 1.0, -1.0, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-    ModelVertex { position: [ 1.0,  1.0, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 0.0] },
+    ModelVertex { position: [-1.0, -1.0, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
+    ModelVertex { position: [-1.0,  1.0, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 0.0] },
+    ModelVertex { position: [ 1.0, -1.0, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 0.0] },
+    ModelVertex { position: [ 1.0,  1.0, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
 ];
 pub const SCREENQUAD_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
 
@@ -360,8 +360,8 @@ impl RenderPipeline
                             wgpu::ColorTargetState 
                             { // 4.
                                 format: config.format,
-                                blend: Some(wgpu::BlendState::REPLACE),
-                                write_mask: wgpu::ColorWrites::ALL,
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                                write_mask: wgpu::ColorWrites::ALL
                             }
                         )],
                     }
