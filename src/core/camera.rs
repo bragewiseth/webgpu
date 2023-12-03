@@ -95,7 +95,8 @@ impl Camera {
 
     pub fn update_view_proj(&mut self) {
         self.uniform.view_position = self.position.to_homogeneous().into();
-        self.uniform.view_proj = (self.projection.calc_matrix() * self.calc_matrix()).into();
+        self.uniform.proj = self.projection.calc_matrix().into();
+        self.uniform.view = self.calc_matrix().into();
     }
 
 
@@ -116,6 +117,9 @@ impl Camera {
 
 
         self.position.z += (self.controller.amount_up - self.controller.amount_down) * self.controller.speed * dt;
+        if self.position.z < 0.4 {
+            self.position.z = 0.4;
+        }
 
         self.yaw += Rad(self.controller.rotate_horizontal) * self.controller.sensitivity * dt;
         self.pitch += Rad(-self.controller.rotate_vertical) * self.controller.sensitivity * dt;
@@ -273,14 +277,16 @@ impl CameraController {
 pub struct CameraUniform {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
-    view_proj: [[f32; 4]; 4],
+    view: [[f32; 4]; 4],
+    proj: [[f32; 4]; 4],
     view_position: [f32; 4],
 }
 
 impl CameraUniform {
     pub fn new() -> Self {
         Self {
-            view_proj: cgmath::Matrix4::identity().into(),
+            view: cgmath::Matrix4::identity().into(),
+            proj: cgmath::Matrix4::identity().into(),
             view_position: [0.0; 4],
         }
     }

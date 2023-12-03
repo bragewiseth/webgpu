@@ -57,7 +57,7 @@ pub async fn run()
             .and_then(|win| win.document())
             .and_then(|doc| 
             {
-                let dst = doc.get_element_by_id("wasm-example")?;
+                let dst = doc.get_element_by_id("f_stop")?;
                 let canvas = web_sys::Element::from(window.canvas());
                 dst.append_child(&canvas).ok()?;
                 Some(())
@@ -68,6 +68,7 @@ pub async fn run()
 
     let mut state = app::engine::Engine::new(window).await;
     let mut last_render_time = instant::Instant::now();  // NEW!
+
     // Event loop...
 
     event_loop.run(

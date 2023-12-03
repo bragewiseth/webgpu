@@ -23,7 +23,7 @@ use winit::window::Window;
 use winit:: event::*;
 use winit::window::CursorGrabMode;
 
-
+const PIXEL_SIZE : u32 = 1;
 
 
 pub struct Engine
@@ -128,8 +128,8 @@ impl Engine
         {
             let size = wgpu::Extent3d 
             {
-                width: config.width / 4,
-                height: config.height / 4,
+                width: config.width / PIXEL_SIZE,
+                height: config.height / PIXEL_SIZE,
                 depth_or_array_layers: 1,
             };
             let texture = Texture::create_blank_texture(&device, size,"low-res-texture", wgpu::FilterMode::Nearest);
@@ -140,8 +140,8 @@ impl Engine
                 depth_texture: Some(Texture::create_depth_texture(&device, 
                 wgpu::Extent3d 
                 {
-                    width: config.width /4 ,
-                    height: config.height / 4,
+                    width: config.width / PIXEL_SIZE,
+                    height: config.height / PIXEL_SIZE,
                     depth_or_array_layers: 1,
                 },
                 "depth_texture",
@@ -241,8 +241,8 @@ impl Engine
             self.pixelframebuffer.texture = Some(Texture::create_blank_texture(&self.device, 
                 wgpu::Extent3d 
                 {
-                    width: self.config.width / 4,
-                    height: self.config.height / 4,
+                    width: self.config.width / PIXEL_SIZE,
+                    height: self.config.height / PIXEL_SIZE,
                     depth_or_array_layers: 1,
                 },
                 "high-res-texture",
@@ -251,8 +251,8 @@ impl Engine
             self.pixelframebuffer.depth_texture = Some(Texture::create_depth_texture(&self.device,
                 wgpu::Extent3d 
                 {
-                    width: self.config.width / 4,
-                    height: self.config.height / 4,
+                    width: self.config.width / PIXEL_SIZE,
+                    height: self.config.height / PIXEL_SIZE,
                     depth_or_array_layers: 1,
                 },
                 "depth_texture",
@@ -339,11 +339,9 @@ impl Engine
         self.camera.update_view_proj();
         self.queue.write_buffer(&self.camera.buffer, 0, bytemuck::cast_slice(&[self.camera.uniform]));
 
-        self.world.sphere_instances.instances[0].position = cgmath::Vector3::new(0.0, 0.0, t * 1.0); 
-        let instance_data = self.world.sphere_instances.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        self.queue.write_buffer(&self.world.sphere_instances.buffer, 0, bytemuck::cast_slice(&instance_data));
-        println!("{:?}", self.world.sphere_instances.instances[0].position);
-        println!("{:?}", t);
+        // self.world.sphere_instances.instances[0].position = cgmath::Vector3::new(0.0, 0.0, t * 1.0); 
+        // let instance_data = self.world.sphere_instances.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        // self.queue.write_buffer(&self.world.sphere_instances.buffer, 0, bytemuck::cast_slice(&instance_data));
     } // end update }}}
 
 
@@ -389,7 +387,9 @@ impl Engine
                 }
             );
             render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube, &self.world.cube_instances, 0..9, &self.camera.bind_group );
-            render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..3);
+            // render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..3);
+            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.sphere, &self.world.sphere_instances, 0..3, &self.camera.bind_group );
+            // render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.plane, &self.world.plane_instances, 0..1, &self.camera.bind_group );
 
         }
         {
@@ -420,7 +420,7 @@ impl Engine
             render_pass.draw_mesh(&self.world.floor);
             render_pass.set_pipeline(&self.final_pipeline.pipeline);
             render_pass.set_bind_group(0, &self.pixelframebuffer.bind_group.as_ref().unwrap(), &[]);
-            render_pass.draw_mesh(&self.world.plane);            
+            render_pass.draw_mesh(&self.world.screen);            
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();

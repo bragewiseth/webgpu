@@ -15,7 +15,9 @@ pub struct World
     pub floor: Mesh,
     pub sphere: Model,
     pub sphere_instances: Instances,
-    pub plane: Mesh,
+    pub plane: Model,
+    pub plane_instances: Instances,
+    pub screen: Mesh,
 }
 
 
@@ -27,7 +29,7 @@ impl World
     {
         let mat_bind_group_layout = &layouts.material;
 
-        let sphere = assets::load_model("sphere1.obj", device, queue, mat_bind_group_layout)
+        let sphere = assets::load_model("sphere.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
         
@@ -48,9 +50,12 @@ impl World
             .unwrap()
             .pop()
             .unwrap();
+        
+        let plane = assets::load_model("plane.obj", device, queue, mat_bind_group_layout)
+            .await
+            .unwrap();
 
-
-        let plane = Mesh::new(device, SCREENQUAD.to_vec(), SCREENQUAD_INDICES.to_vec());
+        let screen = Mesh::new(device, SCREENQUAD.to_vec(), SCREENQUAD_INDICES.to_vec());
 
 
 
@@ -96,7 +101,7 @@ impl World
                 } else {
                     cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
                 };
-                let scale = cgmath::Vector3 { x: 1.0, y: 0.2, z: 0.2 };
+                let scale = cgmath::Vector3 { x: 0.4, y: 0.4, z: 0.4 };
                 Instance {
                     position, rotation, scale
                 }
@@ -114,7 +119,21 @@ impl World
 
         let cube_instances = Instances{ instances: cube_instances, buffer };
 
-
+        let plane_instances = (0..1).map(|_| {
+                let position = cgmath::Vector3 { x:0.0, y: 0.0, z:0.0 } ;
+                let rotation = cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0));
+                let scale = cgmath::Vector3 { x: 1.0, y: 1.0, z: 1.0 };
+                Instance { position, rotation, scale }
+        }).collect::<Vec<_>>();
+        let instance_data = plane_instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
+            }
+        );
+        let plane_instances = Instances{ instances: plane_instances, buffer };
 
 
 
@@ -127,6 +146,8 @@ impl World
             sphere,
             sphere_instances,
             plane,
+            plane_instances,
+            screen,
         }
 
 

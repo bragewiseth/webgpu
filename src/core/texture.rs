@@ -207,6 +207,64 @@ impl Texture {
 
         Self { texture, view, sampler }
     }
+
+
+
+    pub fn create_start_screen(
+        device: &wgpu::Device, 
+        queue: &wgpu::Queue,
+        size : wgpu::Extent3d,
+        label: &str,
+        filter: wgpu::FilterMode,
+    ) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            size, 
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+            label: Some(label),
+        });
+
+        // Create a texture view
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Create a sampler
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: filter,
+            min_filter: filter,
+            mipmap_filter: filter,
+            ..Default::default()
+        });
+
+        let img = image::open("assets/f_stop.png").unwrap();
+        let rgba = img.to_rgba8();
+        let dimensions = img.dimensions();
+
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                aspect: wgpu::TextureAspect::All,
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            &rgba,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * dimensions.0),
+                rows_per_image: Some(dimensions.1),
+            },
+            size,
+        );
+
+        Self { texture, view, sampler }
+    }
+
 }
 
 
