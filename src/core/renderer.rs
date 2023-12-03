@@ -265,12 +265,12 @@ impl RenderPipeline
         label: Option<&str>) -> Self
     {
 
-        let bind_group_layouts : Vec<&wgpu::BindGroupLayout> = resources.iter().map(|x| 
+        let bind_group_layouts : Vec<wgpu::BindGroupLayout> = resources.iter().map(|x| 
         {
             match x
             {
-                PipelineResources::Camera => { &Camera::desc(device) },
-                PipelineResources::Material => { &Material::desc(device) },
+                PipelineResources::Camera => { Camera::desc(device) },
+                PipelineResources::Material => { Material::desc(device) },
             }
         }).collect(); 
         let buffers : Vec<wgpu::VertexBufferLayout<'static>> = vertex_buffers.iter().map(|x| 
@@ -282,6 +282,7 @@ impl RenderPipeline
                 PipelineBuffers::VertexOnly => { VertexOnly::desc() },
             }
         }).collect();
+        let bind_group_layouts : Vec<&wgpu::BindGroupLayout> = bind_group_layouts.iter().collect();
 
         let layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor 
@@ -367,48 +368,47 @@ pub struct Framebuffer
     pub depth_texture: Option<Texture>,
 }
 
-// pub trait Draw<'a>
-pub trait Draw
+pub trait Draw<'a>
 {
 
     fn draw_pipeline_instanced(
         &mut self, 
-        pipeline: RenderPipeline, 
-        model : &Model, 
-        instances : &Instances,
+        pipeline: &'a RenderPipeline, 
+        model : &'a Model, 
+        instances : &'a Instances,
         num_instances: Range<u32>,
-        camera: &wgpu::BindGroup) -> ();
+        camera: &'a wgpu::BindGroup) -> ();
 
     fn draw_pipeline(
         &mut self, 
-        pipeline: RenderPipeline, 
-        model : &Model, 
-        camera: &wgpu::BindGroup) -> ();
+        pipeline: &'a RenderPipeline, 
+        model : &'a Model, 
+        camera: &'a wgpu::BindGroup) -> ();
 
     fn draw_mesh(
 
         &mut self,
-        mesh: &Mesh,
+        mesh: &'a Mesh,
     );
 
     fn draw_mesh_instanced(
         &mut self,
-        mesh: &Mesh,
-        instances: &Instances,
+        mesh: &'a Mesh,
+        instances: &'a Instances,
         num_instances: Range<u32>,
     );
 
 
     fn draw_model(
         &mut self,
-        model: &Model,
+        model: &'a Model,
     );
 
 
     fn draw_model_instanced(
         &mut self,
-        model: &Model,
-        instances: &Instances,
+        model: &'a Model,
+        instances: &'a Instances,
         num_instances: Range<u32>,
     );
 }
@@ -418,15 +418,17 @@ pub trait Draw
 // where
 //     'b: 'a,
 // {
-impl Draw for wgpu::RenderPass<'_>
+impl<'a, 'b> Draw<'b> for wgpu::RenderPass<'a>
+where
+    'b: 'a,
 {
     fn draw_pipeline_instanced(
         &mut self, 
-        pipeline : RenderPipeline, 
-        model : &Model, 
-        instances : &Instances,
+        pipeline : &'b RenderPipeline, 
+        model : &'b Model, 
+        instances : &'b Instances,
         num_instances: Range<u32>,
-        camera: &wgpu::BindGroup) -> ()
+        camera: &'b wgpu::BindGroup) -> ()
     {
         self.set_pipeline(&pipeline.pipeline);
         for (i,resource) in pipeline.resources.iter().enumerate()
@@ -453,9 +455,9 @@ impl Draw for wgpu::RenderPass<'_>
 
     fn draw_pipeline(
         &mut self, 
-        pipeline : RenderPipeline, 
-        model : &Model, 
-        camera: &wgpu::BindGroup) -> ()
+        pipeline : &'b RenderPipeline, 
+        model : &'b Model, 
+        camera: &'b wgpu::BindGroup) -> ()
     {
         self.set_pipeline(&pipeline.pipeline);
         for (i,resource) in pipeline.resources.iter().enumerate()
@@ -482,7 +484,7 @@ impl Draw for wgpu::RenderPass<'_>
 
     fn draw_mesh(
         &mut self,
-        mesh: &Mesh,) 
+        mesh: &'b Mesh,) 
     {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -491,8 +493,8 @@ impl Draw for wgpu::RenderPass<'_>
 
     fn draw_mesh_instanced(
         &mut self,
-        mesh: &Mesh,
-        instances: &Instances,
+        mesh: &'b Mesh,
+        instances: &'b Instances,
         num_instances: Range<u32>,) 
     {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
@@ -503,7 +505,7 @@ impl Draw for wgpu::RenderPass<'_>
 
     fn draw_model(
         &mut self,
-        model: &Model,) 
+        model: &'b Model,) 
     {
         self.set_vertex_buffer(0, model.meshes[0].vertex_buffer.slice(..));
         self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -513,8 +515,8 @@ impl Draw for wgpu::RenderPass<'_>
 
     fn draw_model_instanced(
         &mut self,
-        model: &Model,
-        instances: &Instances,
+        model: &'b Model,
+        instances: &'b Instances,
         num_instances: Range<u32>,)
     {
         self.set_vertex_buffer(0, model.meshes[0].vertex_buffer.slice(..));

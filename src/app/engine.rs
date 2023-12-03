@@ -356,9 +356,9 @@ impl Engine
                     occlusion_query_set: None,
                 }
             );
-            render_pass.draw_pipeline(self.final_pipeline, &self.world.cube, &self.camera.bind_group );
+            render_pass.draw_pipeline(&self.final_pipeline, &self.world.cube, &self.camera.bind_group );
             render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..1);
-            render_pass.draw_pipeline(self.floor_pipeline, &self.world.floor, &self.camera.bind_group );
+            render_pass.draw_pipeline(&self.floor_pipeline, &self.world.floor, &self.camera.bind_group );
         }  
         // {
         //     let mut render_pass = encoder.begin_render_pass(
