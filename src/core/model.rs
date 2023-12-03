@@ -1,5 +1,9 @@
 use crate::core::renderer::InstanceRaw;
 use crate::core::texture::Texture;
+use crate::core::renderer::VertexBuffer;
+
+use wgpu::util::DeviceExt;
+
 
 
 
@@ -13,7 +17,40 @@ pub struct Mesh
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
     pub material: usize,
-} // }}}
+} 
+impl Mesh {
+    
+    pub fn new(
+        device: &wgpu::Device,
+        vertices: Vec<impl VertexBuffer + bytemuck::Pod + bytemuck::Zeroable>,
+        indices: Vec<u32>,
+    ) -> Self {
+
+            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label:None,
+                contents: bytemuck::cast_slice(&indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+            Self {
+                name: "some name".to_string(),
+                vertex_buffer,
+                index_buffer,
+                num_elements: indices.len() as u32,
+                material: 0,
+            }
+    }
+}
+
+
+
+
+// }}}
 
 
 // MATERIAL {{{

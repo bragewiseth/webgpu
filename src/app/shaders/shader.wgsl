@@ -78,8 +78,8 @@ var s_diffuse: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    //return textureSample(t_diffuse, s_diffuse, in.uv);
-    return vec4<f32>(c_diffuse.color);
+    return textureSample(t_diffuse, s_diffuse, in.uv);
+    //return vec4<f32>(c_diffuse.color);
 }
 
 /*

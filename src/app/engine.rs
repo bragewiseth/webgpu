@@ -145,7 +145,8 @@ impl Engine
                 "depth_texture",
                 wgpu::FilterMode::Linear)),
                 bind_group,
-            }        };
+            }       
+        };
 
         let pixelframebuffer: Framebuffer;
         {
@@ -206,7 +207,7 @@ impl Engine
                 &finalshader,
                 false,
                 vec![PipelineResources::Material],
-                vec![PipelineBuffers::Model],
+                vec![PipelineBuffers::VertexOnly],
                 &layouts,
                 Some("final_pipeline_layout"));
         }
@@ -409,6 +410,9 @@ impl Engine
             render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube, &self.world.sphere_instances, 0..1,
                 &self.camera.bind_group );
             render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..9);
+            render_pass.set_pipeline(&self.floor_pipeline.pipeline);
+            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            render_pass.draw_mesh(&self.world.floor);
 
         }
         {

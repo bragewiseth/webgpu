@@ -7,6 +7,16 @@ use std::ops::Range;
 use wgpu::util::DeviceExt;
 
 
+pub const SCREENQUAD: [VertexOnly; 4] = [
+    VertexOnly { position: [-1.0, -1.0, 0.0] },
+    VertexOnly { position: [-1.0,  1.0, 0.0] },
+    VertexOnly { position: [ 1.0, -1.0, 0.0] },
+    VertexOnly { position: [ 1.0,  1.0, 0.0] },
+];
+pub const SCREENQUAD_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
+
+
+
 // VERTEX BUFFER LAYOUTS {{{
 pub trait VertexBuffer
 {

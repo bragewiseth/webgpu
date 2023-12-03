@@ -1,6 +1,8 @@
 use crate::core::model::{Model, Instances, Instance, Mesh  };
 use crate::core::renderer:: BindGroupLayouts ;
 use crate::core::assets;
+use crate::core::renderer::SCREENQUAD;
+use crate::core::renderer::SCREENQUAD_INDICES;
 
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
@@ -49,11 +51,7 @@ impl World
             .unwrap();
 
 
-        let plane = assets::load_meshes_only("plane_mesh.obj", device) 
-            .await
-            .unwrap()
-            .pop()
-            .unwrap();
+        let plane = Mesh::new(device, SCREENQUAD.to_vec(), SCREENQUAD_INDICES.to_vec());
 
 
 
