@@ -31,7 +31,7 @@ pub struct Material
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Color
 {
-    pub color: [f32; 3],
+    pub color: [f32; 4],
 }
 // }}}
 

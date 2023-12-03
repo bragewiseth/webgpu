@@ -48,6 +48,7 @@ impl Camera {
         projection: Projection,
         controller: CameraController,
         device: &wgpu::Device,
+        bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self
     {
         
@@ -63,7 +64,7 @@ impl Camera {
 
 
         let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Camera::desc(device),
+            layout: bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,

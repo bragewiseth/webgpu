@@ -4,7 +4,7 @@ use crate::core::texture::Texture;
 use crate::core::model::{ Material, Model, Instances, Mesh };
 
 use std::ops::Range;
-
+use wgpu::util::DeviceExt;
 
 
 // VERTEX BUFFER LAYOUTS {{{
@@ -203,23 +203,39 @@ impl Resource for Material
         })
     }
 }
+
+
+impl Resource for Framebuffer
+{
+    fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
+    {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                }
+            ],
+            label: Some("color_bind_group_layout"),
+        })
+    }
+}
 // end BIND GROUP LAYOUTS }}}
 
 
 // PIPELINES {{{
-// pub trait PipelineLayout
-// {
-//     fn new(device : &wgpu::Device, bind_group_layouts : &[&wgpu::BindGroupLayout], label: Option<&str> ) -> Self;
-//     fn build_pipeline(
-//         &self, 
-//         device: &wgpu::Device, 
-//         config: &wgpu::SurfaceConfiguration, 
-//         shader: &wgpu::ShaderModule, 
-//         depth_stencil: bool,
-//         buffers : &[wgpu::VertexBufferLayout<'static>],
-//         label: Option<&str>
-//     ) -> wgpu::RenderPipeline; 
-// }
 
 // enum PipelineType
 // {
@@ -228,11 +244,17 @@ impl Resource for Material
 //     Shadow,
 //     PostProcess,
 // }
+//
+pub struct BindGroupLayouts
+{
+    pub camera: wgpu::BindGroupLayout,
+    pub material: wgpu::BindGroupLayout,
+}
 
 pub enum PipelineResources
 {
     Camera,
-    Material,
+    Material
 }
 
 pub enum PipelineBuffers
@@ -262,17 +284,18 @@ impl RenderPipeline
         depth_stencil: bool,
         resources : Vec<PipelineResources>,
         vertex_buffers : Vec<PipelineBuffers>,
+        layouts : &BindGroupLayouts,
         label: Option<&str>) -> Self
     {
 
-        let bind_group_layouts : Vec<wgpu::BindGroupLayout> = resources.iter().map(|x| 
+        let bind_group_layouts : Vec<&wgpu::BindGroupLayout> = resources.iter().map(|x| 
         {
             match x
             {
-                PipelineResources::Camera => { Camera::desc(device) },
-                PipelineResources::Material => { Material::desc(device) },
+                PipelineResources::Camera => { &layouts.camera },
+                PipelineResources::Material => { &layouts.material },
             }
-        }).collect(); 
+        }).collect();
         let buffers : Vec<wgpu::VertexBufferLayout<'static>> = vertex_buffers.iter().map(|x| 
         {
             match x
@@ -282,7 +305,6 @@ impl RenderPipeline
                 PipelineBuffers::VertexOnly => { VertexOnly::desc() },
             }
         }).collect();
-        let bind_group_layouts : Vec<&wgpu::BindGroupLayout> = bind_group_layouts.iter().collect();
 
         let layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor 
@@ -366,7 +388,48 @@ pub struct Framebuffer
 {
     pub texture: Option<Texture>,
     pub depth_texture: Option<Texture>,
+    pub bind_group: Option<wgpu::BindGroup>,
 }
+
+impl Framebuffer
+{
+    pub fn make_bind_group(device : &wgpu::Device, layout : &BindGroupLayouts, texture: &Texture) -> wgpu::BindGroup
+    {
+        let diffuse_color = [1.0, 1.0, 1.0, 1.0];
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &layout.material,
+        entries: &[
+            wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(
+                    wgpu::BufferBinding {
+                                buffer: &device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                                        label: Some("Material Color Buffer"),
+                                        contents: bytemuck::cast_slice(&[diffuse_color]),
+                                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                                    }
+                        ),
+                                offset: 0,
+                                size: None,
+                            }
+                ),
+                    },
+            wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&texture.view),
+                    },
+            wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                    },
+        ],
+        label: None,
+        })
+    }
+}
+
+
 
 pub trait Draw<'a>
 {
@@ -530,29 +593,7 @@ where
     
     
 
-// impl Framebuffer
-// {
-//     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, texture: Texture) -> Self
-//     {
-//         // let size = winit::dpi::PhysicalSize::<u32>::from(config.extent);
-//         let depth_texture = Texture::create_depth_texture(device, &config, "depth_texture");
-//         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-//             layout: &bind_group_layout,
-//             entries: &[
-//                 wgpu::BindGroupEntry {
-//                     binding: 0,
-//                     resource: wgpu::BindingResource::TextureView(&low_res_texture_view),
-//                 },
-//                 wgpu::BindGroupEntry {
-//                     binding: 1,
-//                     resource: wgpu::BindingResource::Sampler(&sampler),
-//                 },
-//             ],
-//             label: Some("texture_bind_group"),
-//         });
-//         Self { texture, Some(depth_texture), Some(bind_group) }
-//     }
-// }
+
 // end RENDERPASS }}}
 
 
