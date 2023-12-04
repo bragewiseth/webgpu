@@ -121,5 +121,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32>
     let light_direction = vec3<f32>(1.0/sqrt(3.0), 1.0/sqrt(3.0), 1.0/sqrt(3.0));
     let light_strength = max(dot(in.normal, light_direction),0.0);
     let normal = in.normal * 0.5 + 0.5;
-    return vec4<f32>(normal * light_strength , 1.0);
+    return vec4<f32>(normal , 1.0);
 }

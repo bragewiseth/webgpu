@@ -1,7 +1,9 @@
+// imports {{{
 use crate::app::world;
 use crate::core::model::{
     Material,
     Instance,
+    Mesh
 };
 use crate::core::texture::Texture;
 use crate::core::camera::{ 
@@ -16,14 +18,19 @@ use crate::core::renderer::{
     RenderPipeline,
     PipelineResources,
     PipelineBuffers,
-    Resource
+    Resource, VertexUV,
+    SCREENQUAD,
+    SCREENQUAD_INDICES,
+    VertexBuffer,
 };
 
 use winit::window::Window;
 use winit:: event::*;
 use winit::window::CursorGrabMode;
+// }}}
 
-const PIXEL_SIZE : u32 = 1;
+
+const PIXEL_SIZE : u32 = 4;
 
 
 pub struct Engine
@@ -41,6 +48,7 @@ pub struct Engine
     final_pipeline : RenderPipeline,
     pixelframebuffer : Framebuffer,
     world : world::World,
+    screenquad : Mesh,
     mouse_locked: bool
 } 
 
@@ -200,6 +208,9 @@ impl Engine
 
         );
 
+        let screenquad_buffer = VertexUV::new_vertex_buffer(&device, &SCREENQUAD);
+        let screenquad_index_buffer = VertexUV::new_index_buffer(&device, &SCREENQUAD_INDICES);
+        let screenquad = Mesh { name: "screenquad".to_string(), vertex_buffer: screenquad_buffer, index_buffer: screenquad_index_buffer, num_elements: 6 };
 
         Self
         {
@@ -216,6 +227,7 @@ impl Engine
             final_pipeline,
             pixelframebuffer,
             world,
+            screenquad,
             mouse_locked: false,
         }
     } // end new }}}
@@ -334,7 +346,6 @@ impl Engine
 // update {{{
     pub fn update(&mut self, dt: instant::Duration, time: instant::Instant)
     { 
-        let t = time.elapsed().as_secs_f32();
         self.camera.update_camera(dt);
         self.camera.update_view_proj();
         self.queue.write_buffer(&self.camera.buffer, 0, bytemuck::cast_slice(&[self.camera.uniform]));
@@ -386,9 +397,9 @@ impl Engine
                     occlusion_query_set: None,
                 }
             );
-            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube, &self.world.cube_instances, 0..9, &self.camera.bind_group );
+            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube,&self.world.mats, &self.world.cube_instances, 0..9, &self.camera.bind_group );
             // render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..3);
-            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.sphere, &self.world.sphere_instances, 0..3, &self.camera.bind_group );
+            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.sphere,&self.world.mats, &self.world.sphere_instances, 0..3, &self.camera.bind_group );
             // render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.plane, &self.world.plane_instances, 0..1, &self.camera.bind_group );
 
         }
@@ -420,11 +431,59 @@ impl Engine
             render_pass.draw_mesh(&self.world.floor);
             render_pass.set_pipeline(&self.final_pipeline.pipeline);
             render_pass.set_bind_group(0, &self.pixelframebuffer.bind_group.as_ref().unwrap(), &[]);
-            render_pass.draw_mesh(&self.world.screen);            
+            render_pass.draw_mesh(&self.screenquad);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())
     } // end render }}}
+    
+
+    pub fn splashscreen(&mut self) -> Result<(), wgpu::SurfaceError>
+    {
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let splash = Texture::from_bytes(&self.device, &self.queue, include_bytes!("../../assets/fstopbackground.png"), "splash.png").unwrap();
+        let splashbindgroup = Framebuffer::make_bind_group(&self.device, &self.layouts, &splash);
+        
+
+
+        let mut encoder = self.device.create_command_encoder(
+            &wgpu::CommandEncoderDescriptor 
+            {
+                label: Some("Render Encoder"),
+            }
+        );
+        {
+            let mut render_pass = encoder.begin_render_pass(
+                &wgpu::RenderPassDescriptor 
+                {
+                    label: Some("Final Pass"),
+                    color_attachments: &[Some(
+                        wgpu::RenderPassColorAttachment 
+                        {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations 
+                            {
+                                // load: wgpu::LoadOp::Load,
+                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.8, g: 0.7, b: 0.9, a: 1.0, }   ),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        }
+                    )],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                }
+            );
+            render_pass.set_pipeline(&self.final_pipeline.pipeline);
+            render_pass.set_bind_group(0, &splashbindgroup, &[]);
+            // render_pass.draw_mesh(&self.world.screen);            
+        }
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+        Ok(())
+    }
 }

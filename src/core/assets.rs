@@ -16,8 +16,8 @@ fn format_url(file_name: &str) -> reqwest::Url {
     let window = web_sys::window().unwrap();
     let location = window.location();
     let mut origin = location.origin().unwrap();
-    if !origin.ends_with("webgpu") {
-        origin = format!("{}/webgpu", origin);
+    if !origin.ends_with("f✦stop") {
+        origin = format!("{}/assets", origin);
     }
     let base = reqwest::Url::parse(&format!("{}/", origin,)).unwrap();
     base.join(file_name).unwrap()
@@ -80,72 +80,14 @@ pub async fn load_texture(
 
 
 
-pub async fn load_meshes_only(
-    file_name: &str,
-    device: &wgpu::Device,) -> anyhow::Result<Vec<model::Mesh>> 
-{
-    let obj_text = load_string(file_name).await?;
-    let obj_cursor = Cursor::new(obj_text);
-    let mut obj_reader = BufReader::new(obj_cursor);
-
-    let (models, _ ) = tobj::load_obj_buf_async(
-        &mut obj_reader,
-        &tobj::LoadOptions {
-            triangulate: true,
-            single_index: true,
-            ..Default::default()
-        },
-        |p| async move {
-            let mat_text = load_string(&p).await.unwrap();
-            tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
-        },
-    )
-    .await?;
-    let meshes = models
-        .into_iter()
-        .map(|m| {
-            let vertices = (0..m.mesh.positions.len() / 3)
-                .map(|i| renderer::VertexOnly {
-                    position: [
-                        m.mesh.positions[i * 3],
-                        m.mesh.positions[i * 3 + 1],
-                        m.mesh.positions[i * 3 + 2],
-                    ],
-                })
-                .collect::<Vec<_>>();
-
-            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Vertx Buffer", file_name)),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Index Buffer", file_name)),
-                contents: bytemuck::cast_slice(&m.mesh.indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-            model::Mesh {
-                name: file_name.to_string(),
-                vertex_buffer,
-                index_buffer,
-                num_elements: m.mesh.indices.len() as u32,
-                material: m.mesh.material_id.unwrap_or(0),
-            }
-        })
-        .collect::<Vec<_>>();
-    Ok(meshes)
-}
-
-
 
 
 pub async fn load_model(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    layout: &wgpu::BindGroupLayout,
-) -> anyhow::Result<model::Model> {
+    layout: &wgpu::BindGroupLayout,) -> anyhow::Result<(Vec<model::Mesh>, Vec<model::Material>)> 
+{
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
     let mut obj_reader = BufReader::new(obj_cursor);
@@ -164,47 +106,48 @@ pub async fn load_model(
     )
     .await?;
     let mut materials = Vec::new();
-    for m in obj_materials? {
-        let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
-        let diffuse_color = model::Color { color: [m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0] };
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(
-                        wgpu::BufferBinding {
-                            buffer: &device.create_buffer_init(
-                                &wgpu::util::BufferInitDescriptor {
-                                    label: Some("Material Color Buffer"),
-                                    contents: bytemuck::cast_slice(&[diffuse_color]),
-                                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                                }
-                            ),
-                            offset: 0,
-                            size: None,
-                        }
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-            ],
-            label: None,
-        });
-
+    
+    if obj_materials.is_ok() {
+        for m in obj_materials? {
+            let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
+            let diffuse_color = model::Color { color: [m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0] };
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(
+                            wgpu::BufferBinding {
+                                buffer: &device.create_buffer_init(
+                                    &wgpu::util::BufferInitDescriptor {
+                                        label: Some("Material Color Buffer"),
+                                        contents: bytemuck::cast_slice(&[diffuse_color]),
+                                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                                    }
+                                ),
+                                offset: 0,
+                                size: None,
+                            }
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                    },
+                ],
+                label: None,
+            });
         materials.push(model::Material {
             name: m.name,
             diffuse_texture,
             diffuse_color: model::Color {color : [m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0]},
             bind_group,
-        })
-    }
+        });
+    }}
     let meshes = models
         .into_iter()
         .map(|m| {
@@ -240,11 +183,9 @@ pub async fn load_model(
                 vertex_buffer,
                 index_buffer,
                 num_elements: m.mesh.indices.len() as u32,
-                material: m.mesh.material_id.unwrap_or(0),
             }
         })
         .collect::<Vec<_>>();
-
-    Ok(model::Model { meshes, materials })
+    Ok((meshes, materials))
 }
 

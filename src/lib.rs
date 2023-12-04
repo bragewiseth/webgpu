@@ -50,7 +50,9 @@ pub async fn run()
     #[cfg(target_arch = "wasm32")]
     {
         use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(1200, 1000));
+
+        window.set_inner_size(PhysicalSize::new(1800, 1000));
+        
 
         use winit::platform::web::WindowExtWebSys;
         web_sys::window()
@@ -68,6 +70,7 @@ pub async fn run()
 
     let mut state = app::engine::Engine::new(window).await;
     let mut last_render_time = instant::Instant::now();  // NEW!
+    let mut time = 0.0;
 
     // Event loop...
 
@@ -111,8 +114,9 @@ pub async fn run()
                 let now = instant::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
+                time += dt.as_secs_f32();
                 state.update(dt, last_render_time);
-                match state.render() 
+                match state.render()
                 {
                     Ok(_) => {}
                     // Reconfigure the surface if lost

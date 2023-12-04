@@ -1,8 +1,6 @@
-use crate::core::model::{Model, Instances, Instance, Mesh  };
+use crate::core::model::{Model, Instances, Instance, Mesh, Material  };
 use crate::core::renderer:: BindGroupLayouts ;
 use crate::core::assets;
-use crate::core::renderer::SCREENQUAD;
-use crate::core::renderer::SCREENQUAD_INDICES;
 
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
@@ -10,6 +8,7 @@ use wgpu::util::DeviceExt;
 
 pub struct World
 {       
+    pub mats: Vec<Material>,
     pub cube: Model,
     pub cube_instances: Instances,
     pub floor: Mesh,
@@ -17,7 +16,6 @@ pub struct World
     pub sphere_instances: Instances,
     pub plane: Model,
     pub plane_instances: Instances,
-    pub screen: Mesh,
 }
 
 
@@ -29,34 +27,36 @@ impl World
     {
         let mat_bind_group_layout = &layouts.material;
 
-        let sphere = assets::load_model("sphere.obj", device, queue, mat_bind_group_layout)
+        let (sphere_mesh, sphere_mat) = assets::load_model("sphere.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
         
-        let sphere_1 = assets::load_model("sphere1.obj", device, queue, mat_bind_group_layout)
+        let (sphere_mesh1, sphere_mat1) = assets::load_model("sphere1.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
 
-        let cube = assets::load_model("cube1.obj", device, queue, mat_bind_group_layout)
+        let (cube_mesh, cube_mat) = assets::load_model("cube1.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
 
-        let cube_1 = assets::load_model("cube1.obj", device, queue, mat_bind_group_layout)
+        let (cube_1, _) = assets::load_model("cube1.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
 
-        let floor = assets::load_meshes_only("floor.obj", device) 
+        let (floor_mesh, _) = assets::load_model("floor.obj", device, queue, mat_bind_group_layout)
             .await
-            .unwrap()
-            .pop()
             .unwrap();
         
-        let plane = assets::load_model("plane.obj", device, queue, mat_bind_group_layout)
+        let (plane, _) = assets::load_model("plane.obj", device, queue, mat_bind_group_layout)
             .await
             .unwrap();
 
-        let screen = Mesh::new(device, SCREENQUAD.to_vec(), SCREENQUAD_INDICES.to_vec());
+        let mats = vec![sphere_mat, sphere_mat1, cube_mat].into_iter().flatten().collect::<Vec<_>>();
 
+        let cube = Model { meshes: cube_1, materials: vec![2] };
+        let sphere = Model { meshes: sphere_mesh, materials: vec![0] };
+        let plane = Model { meshes: plane, materials: vec![0] };
+        let floor = floor_mesh.into_iter().next().unwrap();
 
 
         const SPACE_BETWEEN: f32 = 10.0;
@@ -140,6 +140,7 @@ impl World
 
         Self
         {
+            mats,
             cube,
             cube_instances,
             floor,
@@ -147,7 +148,6 @@ impl World
             sphere_instances,
             plane,
             plane_instances,
-            screen,
         }
 
 

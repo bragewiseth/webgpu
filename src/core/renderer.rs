@@ -7,13 +7,24 @@ use std::ops::Range;
 use wgpu::util::DeviceExt;
 
 
-pub const SCREENQUAD: [ModelVertex; 4] = [
+pub const SCREENQUADMODEL: [ModelVertex; 4] = [
     ModelVertex { position: [-1.0, -1.0, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
     ModelVertex { position: [-1.0,  1.0, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 0.0] },
     ModelVertex { position: [ 1.0, -1.0, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 0.0] },
     ModelVertex { position: [ 1.0,  1.0, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
 ];
+pub const SCREENQUADMODEL_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
+
+
+pub const SCREENQUAD : [VertexUV; 4] = [
+    VertexUV { position: [-1.0, -1.0, 0.0], uv: [0.0, 1.0] },
+    VertexUV { position: [-1.0,  1.0, 0.0], uv: [0.0, 0.0] },
+    VertexUV { position: [ 1.0, -1.0, 0.0], uv: [1.0, 1.0] },
+    VertexUV { position: [ 1.0,  1.0, 0.0], uv: [1.0, 0.0] },
+];
+
 pub const SCREENQUAD_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
+
 
 
 
@@ -35,7 +46,29 @@ pub trait VertexBuffer
             ],
         }
     }
+
+    fn new_vertex_buffer (device : &wgpu::Device, vertices : &[Self]) -> wgpu::Buffer
+    where Self : Sized + bytemuck::Pod
+    {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
+    }
+
+    fn new_index_buffer (device : &wgpu::Device, indices : &[u32]) -> wgpu::Buffer
+    where Self : Sized + bytemuck::Pod
+    {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(indices),
+            usage: wgpu::BufferUsages::INDEX,
+        })
+    }
 }
+
+
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -63,7 +96,41 @@ pub struct VertexOnly
     pub position: [f32; 3],
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct VertexUV
+{
+    pub position: [f32; 3],
+    pub uv: [f32; 2],
+}
+
+
 impl VertexBuffer for VertexOnly {}
+
+impl VertexBuffer for VertexUV
+{
+    fn desc() -> wgpu::VertexBufferLayout<'static>
+    {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<VertexUV>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        }
+    }
+}
+
 
 impl VertexBuffer for InstanceRaw {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
@@ -448,6 +515,7 @@ pub trait Draw<'a>
         &mut self, 
         pipeline: &'a RenderPipeline, 
         model : &'a Model, 
+        materials : &'a Vec<Material>,
         instances : &'a Instances,
         num_instances: Range<u32>,
         camera: &'a wgpu::BindGroup) -> ();
@@ -456,6 +524,7 @@ pub trait Draw<'a>
         &mut self, 
         pipeline: &'a RenderPipeline, 
         model : &'a Model, 
+        materials : &'a Vec<Material>,
         camera: &'a wgpu::BindGroup) -> ();
 
     fn draw_mesh(
@@ -475,22 +544,22 @@ pub trait Draw<'a>
     fn draw_model(
         &mut self,
         model: &'a Model,
+        materials : &'a Vec<Material>,
     );
 
 
     fn draw_model_instanced(
         &mut self,
         model: &'a Model,
+        materials : &'a Vec<Material>,
         instances: &'a Instances,
         num_instances: Range<u32>,
     );
+
 }
 
 
-// impl<'a, 'b> Draw<'b> for wgpu::RenderPass<'a>
-// where
-//     'b: 'a,
-// {
+
 impl<'a, 'b> Draw<'b> for wgpu::RenderPass<'a>
 where
     'b: 'a,
@@ -499,17 +568,19 @@ where
         &mut self, 
         pipeline : &'b RenderPipeline, 
         model : &'b Model, 
+        materials : &'b Vec<Material>,
         instances : &'b Instances,
         num_instances: Range<u32>,
         camera: &'b wgpu::BindGroup) -> ()
     {
+        let mat = &materials[model.materials[0] as usize];
         self.set_pipeline(&pipeline.pipeline);
         for (i,resource) in pipeline.resources.iter().enumerate()
         {
             match resource
             {
                 PipelineResources::Camera => { self.set_bind_group(i as u32, camera, &[]); },
-                PipelineResources::Material => { self.set_bind_group(i as u32, &model.materials[0].bind_group, &[]); },
+                PipelineResources::Material => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
             }
         }
         for (i,buffer) in pipeline.vertex_buffers.iter().enumerate()
@@ -530,15 +601,17 @@ where
         &mut self, 
         pipeline : &'b RenderPipeline, 
         model : &'b Model, 
+        materials : &'b Vec<Material>,
         camera: &'b wgpu::BindGroup) -> ()
     {
+        let mat = &materials[model.materials[0] as usize];
         self.set_pipeline(&pipeline.pipeline);
         for (i,resource) in pipeline.resources.iter().enumerate()
         {
             match resource
             {
                 PipelineResources::Camera => { self.set_bind_group(i as u32, camera, &[]); },
-                PipelineResources::Material => { self.set_bind_group(i as u32, &model.materials[0].bind_group, &[]); },
+                PipelineResources::Material => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
             }
         }
         for (i,buffer) in pipeline.vertex_buffers.iter().enumerate()
@@ -578,29 +651,63 @@ where
 
     fn draw_model(
         &mut self,
-        model: &'b Model,) 
+        model: &'b Model,
+        materials : &'b Vec<Material>,) 
     {
+        let mat = &materials[model.materials[0] as usize];
         self.set_vertex_buffer(0, model.meshes[0].vertex_buffer.slice(..));
         self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(1, &model.materials[0].bind_group, &[]);
+        self.set_bind_group(1, &mat.bind_group, &[]);
         self.draw_indexed(0..model.meshes[0].num_elements, 0, 0..1);
     }
 
     fn draw_model_instanced(
         &mut self,
         model: &'b Model,
+        materials : &'b Vec<Material>,
         instances: &'b Instances,
         num_instances: Range<u32>,)
     {
+        let mat = &materials[model.materials[0] as usize];
         self.set_vertex_buffer(0, model.meshes[0].vertex_buffer.slice(..));
         self.set_vertex_buffer(1, instances.buffer.slice(..));
         self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(1, &model.materials[0].bind_group, &[]);
+        self.set_bind_group(1, &mat.bind_group, &[]);
         self.draw_indexed(0..model.meshes[0].num_elements, 0, num_instances);
     }
+
+
+
 }
 
-    
+
+// fn splashscreen(window : &winit::window::Window, device : &wgpu::Device, queue : &wgpu::Queue, sc_desc : &wgpu::SwapChainDescriptor, format : wgpu::TextureFormat) -> Texture
+// {
+//     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Splashscreen Encoder") });
+//     let texture = Texture::from_bytes(device, queue, include_bytes!("../../assets/fstopwhite.png"), "splashscreen.png").unwrap();
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
+// }
     
 
 
@@ -613,27 +720,8 @@ where
 
 // STUFF THAT COULD POTEINTIALLY BE USED LATER {{{
 
-// pub struct Layouts
-// {
-//     pub camera: wgpu::BindGroupLayout,
-//     pub texture: wgpu::BindGroupLayout,
-//     pub color: wgpu::BindGroupLayout,
-//     // pub light: wgpu::BindGroupLayout,
-// }
-// impl Layouts
-// {
-//     pub fn new(device : &wgpu::Device) -> Self
-//     {
-//         let camera = Camera::desc(device);
-//         let texture = texture::Texture::desc(device);
-//         let color = <[f32; 4]>::desc(device);
-//         Self { camera, texture, color }
-//     }
-// }
-//
-//
-//
-//
+
+
 // #[repr(C)]
 // #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 // #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

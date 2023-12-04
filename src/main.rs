@@ -1,5 +1,5 @@
 
-use f_stop::run;
+use fstop::run;
 
 fn main() {
     pollster::block_on(run());
