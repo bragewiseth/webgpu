@@ -1,6 +1,6 @@
 # *F✦STOP* Graphics and Compute Engine
 
-![](/assets/fstopwhite.png)
+<img src="/assets/fstopwhite.png" alt="logo" width="200"/>
 
 *F✦STOP* Is a graphics engine written in rust, it is based on the wgpu library so it runs on the web as well!
 
