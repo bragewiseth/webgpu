@@ -22,12 +22,16 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 
+#[derive(Debug)]
+pub struct CameraState
+{
+    pub position: Point3<f32>,
+    pub rotation: Quaternion<f32>,
+}
 
 #[derive(Debug)]
 pub struct Camera {
-    pub position: Point3<f32>,
-    yaw: Rad<f32>,
-    pitch: Rad<f32>,
+    pub state: CameraState,
     pub bind_group: wgpu::BindGroup,
     pub buffer : wgpu::Buffer,
     pub uniform: CameraUniform,
@@ -67,21 +71,23 @@ impl Camera {
             layout: bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
+                    binding: 0, resource: camera_buffer.as_entire_binding(),
                 }
             ],
             label: Some("camera_bind_group"),
         });
 
 
-
+        let rotation = Quaternion::from(Euler::new(yaw.into(), pitch.into(), Rad(0.0)));
+        let state = CameraState 
+        {
+            position: position.into(),
+            rotation,
+        };
 
 
         let mut cam = Self {
-            position: position.into(),
-            yaw: yaw.into(),
-            pitch: pitch.into(),
+            state,
             bind_group: camera_bind_group,
             buffer: camera_buffer,
             uniform: camera_uniform,
@@ -93,67 +99,42 @@ impl Camera {
 
     }
 
-    pub fn update_view_proj(&mut self) {
-        self.uniform.view_position = self.position.to_homogeneous().into();
+    pub fn update_view_proj(&mut self) 
+    {
+        self.uniform.view_position = self.state.position.to_homogeneous().into();
         self.uniform.proj = self.projection.calc_matrix().into();
         self.uniform.view = self.calc_matrix().into();
     }
 
 
-    pub fn update_camera(&mut self , dt: Duration) {
-        let dt = dt.as_secs_f32();
-
-        // Move forward/backward and left/right
-        let (yaw_sin, yaw_cos) = self.yaw.0.sin_cos();
-        let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
-        let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
-        self.position += forward * (self.controller.amount_forward - self.controller.amount_backward) * self.controller.speed * dt;
-        self.position += right * (self.controller.amount_right - self.controller.amount_left) * self.controller.speed * dt;
-
-        let (pitch_sin, pitch_cos) = self.pitch.0.sin_cos();
-        let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
-        self.position += scrollward * self.controller.scroll * self.controller.speed * self.controller.sensitivity * dt;
-        self.controller.scroll = 0.0;
-
-
-        self.position.z += (self.controller.amount_up - self.controller.amount_down) * self.controller.speed * dt;
-        if self.position.z < 0.4 {
-            self.position.z = 0.4;
-        }
-
-        self.yaw += Rad(self.controller.rotate_horizontal) * self.controller.sensitivity * dt;
-        self.pitch += Rad(-self.controller.rotate_vertical) * self.controller.sensitivity * dt;
-
-
-        self.controller.rotate_horizontal = 0.0;
-        self.controller.rotate_vertical = 0.0;
-
-        if self.pitch < -Rad(SAFE_FRAC_PI_2) {
-            self.pitch = -Rad(SAFE_FRAC_PI_2);
-        } else if self.pitch > Rad(SAFE_FRAC_PI_2) {
-            self.pitch = Rad(SAFE_FRAC_PI_2);
-        }
+    pub fn update_camera(&mut self , dt: Duration) 
+    {
+        self.controller.update_fps(&mut self.state ,dt);
     }
 
-    pub fn calc_matrix(&self) -> Matrix4<f32> {
-        let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
-        let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
+    pub fn calc_matrix(&self) -> Matrix4<f32> 
+    {
+        let rotation = Euler::from(self.state.rotation);
 
         Matrix4::look_to_rh(
-            self.position,
+            self.state.position,
             Vector3::new(
-                cos_pitch * sin_yaw,
-                cos_pitch * cos_yaw,
-                sin_pitch,
+                rotation.x.sin() * rotation.y.cos(),
+                rotation.x.sin() * rotation.y.sin(),
+                rotation.x.cos(),
             ).normalize(),
             Vector3::unit_z(),
         )
+        // let mut mat = Matrix4::from(self.state.rotation).invert().unwrap();
+        // mat.z = self.state.position.to_homogeneous().into();
+        // mat
     }
 }
 
 
 #[derive(Debug)]
-pub struct Projection {
+pub struct Projection 
+{
     aspect: f32,
     fovy: Rad<f32>,
     znear: f32,
@@ -188,7 +169,8 @@ impl Projection {
 
 
 #[derive(Debug)]
-pub struct CameraController {
+pub struct CameraController 
+{
     amount_left: f32,
     amount_right: f32,
     amount_forward: f32,
@@ -265,14 +247,85 @@ impl CameraController {
             }) => *scroll as f32,
         };
     }
+
+    pub fn update_fps(&mut self, state: &mut CameraState, dt: Duration) {
+        let dt = dt.as_secs_f32();
+        // Move forward/backward and left/right
+        let mut rotation = Euler::from(state.rotation);
+        let (yaw_sin, yaw_cos) = rotation.y.sin_cos();
+        let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
+        let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
+        let (pitch_sin, pitch_cos) = rotation.x.sin_cos();
+        state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
+        state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+
+        let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
+        state.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
+        self.scroll = 0.0;
+
+        state.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
+        if state.position.z < 0.4 { state.position.z = 0.4; }
+
+        rotation.x += Rad(self.rotate_horizontal) * self.sensitivity * dt;
+        rotation.y += Rad(-self.rotate_vertical) * self.sensitivity * dt;
+
+        self.rotate_horizontal = 0.0;
+        self.rotate_vertical = 0.0;
+
+        if rotation.x < -Rad(SAFE_FRAC_PI_2) { rotation.x = -Rad(SAFE_FRAC_PI_2); } 
+        else if rotation.x > Rad(SAFE_FRAC_PI_2) { rotation.x = Rad(SAFE_FRAC_PI_2); }    
+        state.rotation = (rotation).into();
+    }
+
+    // pub fn update_orbit(&mut self, state: &mut CameraState, dt: Duration) 
+    // {
+    //     let dt = dt.as_secs_f32();
+    //     let mut rotation = Euler::from(state.rotation);
+    //     let (yaw_sin, yaw_cos) = rotation.y.sin_cos();
+    //     let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
+    //     let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
+    //     let (pitch_sin, pitch_cos) = rotation.x.sin_cos();
+    //     
+    //     let cam_as_mat = Matrix4::look_to_rh(
+    //         state.position,
+    //         Vector3::new(
+    //             cos_pitch * sin_yaw,
+    //             cos_pitch * cos_yaw,
+    //             sin_pitch,
+    //         ).normalize(),
+    //         Vector3::unit_z(),
+    //     );
+    //     let transform = Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0))
+    //     
+    //     state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
+    //     state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+    //
+    //     let scrollward = Vector3::unit_z(); 
+    //     state.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
+    //     self.scroll = 0.0;
+    // }
+
+    // pub fn update_2d(&mut self, state: &mut CameraState, dt: Duration) 
+    // {
+    //     let dt = dt.as_secs_f32();
+    //     // Move forward/backward and left/right
+    //     let (yaw_sin, yaw_cos) = state.yaw.0.sin_cos();
+    //     let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
+    //     let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
+    //     state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
+    //     state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+    //
+    //     let (pitch_sin, pitch_cos) = state.pitch.0.sin_cos();
+    //     let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
+    //     state.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
+    //     self.scroll = 0.0;
+    // }
 }
 
 
 
 
-// We need this for Rust to store our data correctly for the shaders
 #[repr(C)]
-// // This is so we can store this in a buffer
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     // We can't use cgmath with bytemuck directly so we'll have
