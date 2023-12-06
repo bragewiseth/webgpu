@@ -224,7 +224,7 @@ impl Resource for Camera
                 wgpu::BindGroupLayoutEntry 
                 {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX ,
                     ty: wgpu::BindingType::Buffer 
                     {
                         ty: wgpu::BufferBindingType::Uniform,

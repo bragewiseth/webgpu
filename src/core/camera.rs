@@ -115,19 +115,19 @@ impl Camera {
     pub fn calc_matrix(&self) -> Matrix4<f32> 
     {
         let rotation = Euler::from(self.state.rotation);
-
+        let (sin_pitch, cos_pitch) = rotation.x.sin_cos();
+        let (sin_yaw, cos_yaw) = rotation.y.sin_cos();
         Matrix4::look_to_rh(
             self.state.position,
             Vector3::new(
-                rotation.x.sin() * rotation.y.cos(),
-                rotation.x.sin() * rotation.y.sin(),
-                rotation.x.cos(),
+                cos_pitch * sin_yaw,
+                cos_pitch * cos_yaw,
+                sin_pitch,
             ).normalize(),
             Vector3::unit_z(),
         )
-        // let mut mat = Matrix4::from(self.state.rotation).invert().unwrap();
-        // mat.z = self.state.position.to_homogeneous().into();
-        // mat
+
+        // Matrix4::from(rotation).inverse_transform().unwrap() * Matrix4::from_translation(-self.state.position.to_vec())
     }
 }
 
@@ -266,15 +266,16 @@ impl CameraController {
         state.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
         if state.position.z < 0.4 { state.position.z = 0.4; }
 
-        rotation.x += Rad(self.rotate_horizontal) * self.sensitivity * dt;
-        rotation.y += Rad(-self.rotate_vertical) * self.sensitivity * dt;
+        rotation.y += Rad(self.rotate_horizontal) * self.sensitivity * dt;
+        rotation.x += Rad(-self.rotate_vertical) * self.sensitivity * dt;
+        // rotation.x = rotation.x.max(-Rad(SAFE_FRAC_PI_2)).min(Rad(SAFE_FRAC_PI_2));
 
         self.rotate_horizontal = 0.0;
         self.rotate_vertical = 0.0;
 
         if rotation.x < -Rad(SAFE_FRAC_PI_2) { rotation.x = -Rad(SAFE_FRAC_PI_2); } 
         else if rotation.x > Rad(SAFE_FRAC_PI_2) { rotation.x = Rad(SAFE_FRAC_PI_2); }    
-        state.rotation = (rotation).into();
+        state.rotation = Quaternion::from(rotation);
     }
 
     // pub fn update_orbit(&mut self, state: &mut CameraState, dt: Duration) 
