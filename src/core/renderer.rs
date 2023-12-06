@@ -247,9 +247,26 @@ impl Resource for Material
     {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+
                 wgpu::BindGroupLayoutEntry 
                 {
-                    binding: 0,
+                    binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer 
                     {
@@ -257,6 +274,26 @@ impl Resource for Material
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
+                    count: None,
+                },
+            ],
+            label: Some("material_bind_group_layout"),
+        })
+    }
+}
+
+
+
+impl Resource for Framebuffer
+{
+    fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
+    {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
@@ -272,40 +309,15 @@ impl Resource for Material
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                }
-            ],
-            label: Some("color_bind_group_layout"),
-        })
-    }
-}
-
-
-impl Resource for Framebuffer
-{
-    fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
-    {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         multisampled: false,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        sample_type: wgpu::TextureSampleType::Depth,
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                }
             ],
-            label: Some("color_bind_group_layout"),
+            label: Some("framebuffer_bind_group_layout"),
         })
     }
 }
@@ -326,19 +338,22 @@ pub struct BindGroupLayouts
 {
     pub camera: wgpu::BindGroupLayout,
     pub material: wgpu::BindGroupLayout,
+    pub framebuffer: wgpu::BindGroupLayout,
 }
 
 pub enum PipelineResources
 {
     Camera,
-    Material
+    Material,
+    Framebuffer,
 }
 
 pub enum PipelineBuffers
 {
     Model,
     Instance,
-    VertexOnly
+    VertexOnly,
+    VertexUV
 }
 
 
@@ -371,6 +386,7 @@ impl RenderPipeline
             {
                 PipelineResources::Camera => { &layouts.camera },
                 PipelineResources::Material => { &layouts.material },
+                PipelineResources::Framebuffer => { &layouts.framebuffer },
             }
         }).collect();
         let buffers : Vec<wgpu::VertexBufferLayout<'static>> = vertex_buffers.iter().map(|x| 
@@ -380,6 +396,7 @@ impl RenderPipeline
                 PipelineBuffers::Model => { ModelVertex::desc() },
                 PipelineBuffers::Instance => { InstanceRaw::desc() },
                 PipelineBuffers::VertexOnly => { VertexOnly::desc() },
+                PipelineBuffers::VertexUV => { VertexUV::desc() },
             }
         }).collect();
 
@@ -470,27 +487,14 @@ pub struct Framebuffer
 
 impl Framebuffer
 {
-    pub fn make_bind_group(device : &wgpu::Device, layout : &BindGroupLayouts, texture: &Texture) -> wgpu::BindGroup
+    pub fn make_bind_group(device : &wgpu::Device, layout : &BindGroupLayouts, texture: &Texture, depth: &Texture ) -> wgpu::BindGroup
     {
-        let diffuse_color = [1.0, 1.0, 1.0, 1.0];
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &layout.material,
+        layout: &layout.framebuffer,
         entries: &[
             wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer(
-                    wgpu::BufferBinding {
-                                buffer: &device.create_buffer_init(
-                        &wgpu::util::BufferInitDescriptor {
-                                        label: Some("Material Color Buffer"),
-                                        contents: bytemuck::cast_slice(&[diffuse_color]),
-                                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                                    }
-                        ),
-                                offset: 0,
-                                size: None,
-                            }
-                ),
+                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
                     },
             wgpu::BindGroupEntry {
                         binding: 1,
@@ -498,7 +502,7 @@ impl Framebuffer
                     },
             wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                        resource: wgpu::BindingResource::TextureView(&depth.view),
                     },
         ],
         label: None,
@@ -558,7 +562,7 @@ pub trait Draw<'a>
 
 }
 
-
+// future work here, convert draw_pipeline to -> set pipeline and bind grupos so it is more flexible and bind gropus dont get messed up
 
 impl<'a, 'b> Draw<'b> for wgpu::RenderPass<'a>
 where
@@ -581,6 +585,7 @@ where
             {
                 PipelineResources::Camera => { self.set_bind_group(i as u32, camera, &[]); },
                 PipelineResources::Material => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
+                PipelineResources::Framebuffer => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
             }
         }
         for (i,buffer) in pipeline.vertex_buffers.iter().enumerate()
@@ -590,6 +595,7 @@ where
                 PipelineBuffers::Model => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
                 PipelineBuffers::Instance => { self.set_vertex_buffer(i as u32 , instances.buffer.slice(..)); },
                 PipelineBuffers::VertexOnly => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
+                PipelineBuffers::VertexUV => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
             }
         }
         self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -612,6 +618,7 @@ where
             {
                 PipelineResources::Camera => { self.set_bind_group(i as u32, camera, &[]); },
                 PipelineResources::Material => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
+                PipelineResources::Framebuffer => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
             }
         }
         for (i,buffer) in pipeline.vertex_buffers.iter().enumerate()
@@ -621,6 +628,7 @@ where
                 PipelineBuffers::Model => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
                 PipelineBuffers::Instance => { },
                 PipelineBuffers::VertexOnly => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
+                PipelineBuffers::VertexUV => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
             }
         }
         self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);

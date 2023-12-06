@@ -75,11 +75,11 @@ struct Color
     color: vec4<f32>,
 };
 
-@group(1) @binding(0)
+@group(1) @binding(2)
 var<uniform> c_diffuse: Color;
 @group(1) @binding(1)
 var t_diffuse: texture_2d<f32>;
-@group(1)@binding(2)
+@group(1)@binding(0)
 var s_diffuse: sampler;
 
 
@@ -89,35 +89,8 @@ var s_diffuse: sampler;
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> 
 {
-    //return textureSample(t_diffuse, s_diffuse, in.uv);
+
     //if (in.world_position.z < 0.0){ discard; }
-    //return vec4<f32>(in.world_position.xyz, 1.0);
-    //return vec4<f32>(c_diffuse.color);
-    //return vec4<f32>(in.normal, 1.0);
-
-    // ray trace sphere 
-    /*
-    let sphere_center = vec3<f32>(0.0, 0.0, 0.0);
-    let sphere_radius = 1.0;
-    let ray_origin = vec3<f32>(0.0, 0.0, 5.0);
-    let ray_direction = normalize(in.world_position.xyz - ray_origin);
-    let oc = ray_origin - sphere_center;
-    let a = dot(ray_direction, ray_direction);
-    let b = 2.0 * dot(oc, ray_direction);
-    let c = dot(oc, oc) - sphere_radius * sphere_radius;
-    let discriminant = b * b - 4.0 * a * c;
-    if (discriminant < 0.0) {
-        discard;
-    }
-    let t = (-b - sqrt(discriminant)) / (2.0 * a);
-    let hit_point = ray_origin + ray_direction * t;
-    let normal = normalize(hit_point - sphere_center);
-    return vec4<f32>(normal, 1.0);
-    */
-    
-
-    //return vec4<f32>(in.normal * 0.5 + 0.5, 1.0);
-
     let light_direction = vec3<f32>(1.0/sqrt(3.0), 1.0/sqrt(3.0), 1.0/sqrt(3.0));
     let light_strength = max(dot(in.normal, light_direction),0.0);
     let normal = in.normal * 0.5 + 0.5;

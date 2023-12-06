@@ -30,7 +30,7 @@ use winit::window::CursorGrabMode;
 // }}}
 
 
-const PIXEL_SIZE : u32 = 4;
+const PIXEL_SIZE : u32 = 8;
 
 
 pub struct Engine
@@ -129,6 +129,7 @@ impl Engine
         {
             camera: Camera::desc(&device),
             material: Material::desc(&device),
+            framebuffer: Framebuffer::desc(&device),
         };
 
 
@@ -141,19 +142,12 @@ impl Engine
                 depth_or_array_layers: 1,
             };
             let texture = Texture::create_blank_texture(&device, size,"low-res-texture", wgpu::FilterMode::Nearest);
-            let bind_group = Some(Framebuffer::make_bind_group(&device, &layouts, &texture));
+            let depth_texture = Texture::create_depth_texture(&device, size, "depth_texture", wgpu::FilterMode::Nearest);
+            let bind_group = Some(Framebuffer::make_bind_group(&device, &layouts,&texture,  &depth_texture));
             pixelframebuffer = Framebuffer
             {
                 texture: Some(texture),
-                depth_texture: Some(Texture::create_depth_texture(&device, 
-                wgpu::Extent3d 
-                {
-                    width: config.width / PIXEL_SIZE,
-                    height: config.height / PIXEL_SIZE,
-                    depth_or_array_layers: 1,
-                },
-                "depth_texture",
-                wgpu::FilterMode::Nearest)),
+                depth_texture: Some(depth_texture),
                 bind_group,
             }
         };
@@ -165,13 +159,16 @@ impl Engine
             let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
             let floorshader = device.create_shader_module(wgpu::include_wgsl!("shaders/floor.wgsl"));
             let finalshader = device.create_shader_module(wgpu::include_wgsl!("shaders/final.wgsl"));
+            let rayshader = device.create_shader_module(wgpu::include_wgsl!("shaders/raytrace.wgsl"));
             pixel_pipeline = RenderPipeline::new(
                 &device, 
                 &config,
                 &shader,
+                // &rayshader,
                 true,
                 vec![PipelineResources::Camera , PipelineResources::Material],
                 vec![PipelineBuffers::Model, PipelineBuffers::Instance ],
+                // vec![PipelineBuffers::VertexUV],
                 &layouts,
                 Some("pixel_pipeline_layout"));
             floor_pipeline = RenderPipeline::new(
@@ -180,7 +177,7 @@ impl Engine
                 &floorshader,
                 false,
                 vec![PipelineResources::Camera],
-                vec![PipelineBuffers::VertexOnly],
+                vec![PipelineBuffers::Model],
                 &layouts,
                 Some("floor_pipeline_layout"));
             final_pipeline = RenderPipeline::new(
@@ -188,8 +185,8 @@ impl Engine
                 &config,
                 &finalshader,
                 false,
-                vec![ PipelineResources::Material],
-                vec![PipelineBuffers::Model],
+                vec![PipelineResources::Framebuffer],
+                vec![PipelineBuffers::VertexUV],
                 &layouts,
                 Some("final_pipeline_layout"));
         }
@@ -270,7 +267,8 @@ impl Engine
                 "depth_texture",
                 wgpu::FilterMode::Nearest));
             
-            self.pixelframebuffer.bind_group = Some(Framebuffer::make_bind_group(&self.device, &self.layouts, self.pixelframebuffer.texture.as_ref().unwrap()));
+            self.pixelframebuffer.bind_group = Some(Framebuffer::make_bind_group(&self.device, &self.layouts, self.pixelframebuffer.texture.as_ref().unwrap(), 
+                self.pixelframebuffer.depth_texture.as_ref().unwrap()));
         }
     } // end resize }}}
 
@@ -379,7 +377,7 @@ impl Engine
                             view: &self.pixelframebuffer.texture.as_ref().unwrap().view,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 1.0, g: 1.0, b: 1.0, a: 0.0, }   ),
+                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 0.0, }   ),
                                 // load : wgpu::LoadOp::Load,
                                 store: wgpu::StoreOp::Store,
                             },
@@ -388,7 +386,7 @@ impl Engine
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &self.pixelframebuffer.depth_texture.as_ref().unwrap().view,
                         depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0), // 1.
+                            load: wgpu::LoadOp::Clear(1.0),
                             store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
@@ -397,11 +395,14 @@ impl Engine
                     occlusion_query_set: None,
                 }
             );
-            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube,&self.world.mats, &self.world.cube_instances, 0..9, &self.camera.bind_group );
+            // render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube, &self.world.mats, &self.world.cube_instances, 0..9, &self.camera.bind_group );
             // render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..3);
-            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.sphere,&self.world.mats, &self.world.sphere_instances, 0..3, &self.camera.bind_group );
+            render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.sphere, &self.world.mats, &self.world.sphere_instances, 0..3, &self.camera.bind_group );
             // render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.plane, &self.world.plane_instances, 0..1, &self.camera.bind_group );
-
+            // render_pass.set_pipeline(&self.pixel_pipeline.pipeline);
+            // render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            // render_pass.set_bind_group(1, &self.world.mats[0].bind_group, &[]);
+            // render_pass.draw_mesh(&self.screenquad);
         }
         {
             let mut render_pass = encoder.begin_render_pass(
@@ -416,7 +417,7 @@ impl Engine
                             ops: wgpu::Operations 
                             {
                                 // load: wgpu::LoadOp::Load,
-                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.8, g: 0.7, b: 0.9, a: 1.0, }   ),
+                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.1, g: 0.1, b: 0.1, a: 1.0, }   ),
                                 store: wgpu::StoreOp::Store,
                             },
                         }
@@ -440,12 +441,13 @@ impl Engine
     } // end render }}}
     
 
+// splashscreen {{{
     pub fn splashscreen(&mut self) -> Result<(), wgpu::SurfaceError>
     {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let splash = Texture::from_bytes(&self.device, &self.queue, include_bytes!("../../assets/fstopbackground.png"), "splash.png").unwrap();
-        let splashbindgroup = Framebuffer::make_bind_group(&self.device, &self.layouts, &splash);
+        // let splashbindgroup = Framebuffer::make_bind_group(&self.device, &self.layouts, &splash);
         
 
 
@@ -468,7 +470,7 @@ impl Engine
                             ops: wgpu::Operations 
                             {
                                 // load: wgpu::LoadOp::Load,
-                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.8, g: 0.7, b: 0.9, a: 1.0, }   ),
+                                load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.1, g: 0.1, b: 0.1, a: 1.0, }   ),
                                 store: wgpu::StoreOp::Store,
                             },
                         }
@@ -479,7 +481,7 @@ impl Engine
                 }
             );
             render_pass.set_pipeline(&self.final_pipeline.pipeline);
-            render_pass.set_bind_group(0, &splashbindgroup, &[]);
+            // render_pass.set_bind_group(0, &splashbindgroup, &[]);
             // render_pass.draw_mesh(&self.world.screen);            
         }
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -487,3 +489,4 @@ impl Engine
         Ok(())
     }
 }
+// end splashscreen }}}

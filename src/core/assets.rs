@@ -116,6 +116,14 @@ pub async fn load_model(
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
+                        resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
                         resource: wgpu::BindingResource::Buffer(
                             wgpu::BufferBinding {
                                 buffer: &device.create_buffer_init(
@@ -130,14 +138,6 @@ pub async fn load_model(
                             }
                         ),
                     },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                    },
                 ],
                 label: None,
             });
@@ -151,21 +151,45 @@ pub async fn load_model(
     let meshes = models
         .into_iter()
         .map(|m| {
-            let vertices = (0..m.mesh.positions.len() / 3)
-                .map(|i| renderer::ModelVertex {
-                    position: [
+            let pos = (0..m.mesh.positions.len() / 3)
+                .map(|i| [
                         m.mesh.positions[i * 3],
                         m.mesh.positions[i * 3 + 1],
                         m.mesh.positions[i * 3 + 2],
-                    ],
-                    uv: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
-                    normal: [
+                    ]
+                );
+
+            let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 {
+                (0..m.mesh.texcoords.len() / 2)
+                    .map(|i| [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]])
+                    .collect()
+            } else {
+                (0..m.mesh.positions.len() / 3)
+                    .map(|_| [0.0, 0.0])
+                    .collect()
+            }; 
+
+            let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 {
+                (0..m.mesh.normals.len() / 3)
+                    .map(|i| [
                         m.mesh.normals[i * 3],
                         m.mesh.normals[i * 3 + 1],
                         m.mesh.normals[i * 3 + 2],
-                    ],
-                })
-                .collect::<Vec<_>>();
+                    ])
+                    .collect()
+            } else {
+                (0..m.mesh.positions.len() / 3)
+                    .map(|_| [0.0, 0.0, 0.0])
+                    .collect()
+            };
+
+            let vertices = pos.zip(uv).zip(normals).map(|((pos, uv), normal)| renderer::ModelVertex {
+                position: pos,
+                uv,
+                normal,
+            }).collect::<Vec<_>>();
+
+
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{:?} Vertex Buffer", file_name)),
