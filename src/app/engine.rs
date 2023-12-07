@@ -195,11 +195,11 @@ impl Engine
 
         let world = world::World::new(&device, &queue, &layouts ).await;
         let camera = Camera::new(
-            cgmath::Point3::new(0.0, 0.0, 3.0),
+            cgmath::Point3::new(0.0, -10.0, 3.0),
             cgmath::Deg(0.0),
             cgmath::Deg(0.0),
             Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0),
-            CameraController::new(5.0, 0.4),
+            CameraController::new(8.0, 0.2),
             &device,
             &layouts.camera,
 
@@ -344,7 +344,7 @@ impl Engine
 // update {{{
     pub fn update(&mut self, dt: instant::Duration, time: instant::Instant)
     { 
-        self.camera.update_camera(dt);
+        // self.camera.update_orbit(dt);
         self.camera.update_view_proj();
         self.queue.write_buffer(&self.camera.buffer, 0, bytemuck::cast_slice(&[self.camera.uniform]));
 

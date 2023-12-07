@@ -11,7 +11,6 @@ use std::f32::consts::FRAC_PI_2;
 
 
 
-const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -27,6 +26,8 @@ pub struct CameraState
 {
     pub position: Point3<f32>,
     pub rotation: Quaternion<f32>,
+    // pub yaw: Rad<f32>,
+    // pub pitch: Rad<f32>,
 }
 
 #[derive(Debug)]
@@ -78,11 +79,13 @@ impl Camera {
         });
 
 
-        let rotation = Quaternion::from(Euler::new(yaw.into(), pitch.into(), Rad(0.0)));
+        let rotation = Quaternion::from(Euler::new(pitch.into(), yaw.into(), Rad(0.0)));
         let state = CameraState 
         {
             position: position.into(),
             rotation,
+            // yaw: yaw.into(),
+            // pitch: pitch.into(),
         };
 
 
@@ -107,29 +110,43 @@ impl Camera {
     }
 
 
-    pub fn update_camera(&mut self , dt: Duration) 
+    pub fn update_fps(&mut self , dt: Duration) 
+    {
+        self.controller.update_fps(&mut self.state ,dt);
+    }
+
+    pub fn update_orbit(&mut self , dt: Duration) 
     {
         self.controller.update_fps(&mut self.state ,dt);
     }
 
     pub fn calc_matrix(&self) -> Matrix4<f32> 
-    {
-        let rotation = Euler::from(self.state.rotation);
-        let (sin_pitch, cos_pitch) = rotation.x.sin_cos();
-        let (sin_yaw, cos_yaw) = rotation.y.sin_cos();
-        Matrix4::look_to_rh(
+    {        
+        // let (sin_pitch, cos_pitch) = self.state.pitch.0.sin_cos();
+        // let (sin_yaw, cos_yaw) = self.state.yaw.0.sin_cos();
+
+        Matrix4::look_to_rh
+        (
             self.state.position,
-            Vector3::new(
-                cos_pitch * sin_yaw,
-                cos_pitch * cos_yaw,
-                sin_pitch,
-            ).normalize(),
+            -self.state.rotation * Vector3::unit_y(),
             Vector3::unit_z(),
         )
 
-        // Matrix4::from(rotation).inverse_transform().unwrap() * Matrix4::from_translation(-self.state.position.to_vec())
+        // Matrix4::look_to_rh(
+        //     self.state.position,
+        //     Vector3::new(
+        //         cos_pitch * sin_yaw,
+        //         cos_pitch * cos_yaw,
+        //         sin_pitch,
+        //     ).normalize(),
+        //     Vector3::unit_z(),
+        // )
+
+        // Matrix4::from(self.state.rotation)
     }
+
 }
+
 
 
 #[derive(Debug)]
@@ -250,61 +267,63 @@ impl CameraController {
 
     pub fn update_fps(&mut self, state: &mut CameraState, dt: Duration) {
         let dt = dt.as_secs_f32();
-        // Move forward/backward and left/right
-        let mut rotation = Euler::from(state.rotation);
-        let (yaw_sin, yaw_cos) = rotation.y.sin_cos();
-        let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
-        let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
-        let (pitch_sin, pitch_cos) = rotation.x.sin_cos();
+        let forward = (state.rotation * Vector3::unit_y());
+        let right = state.rotation * Vector3::unit_x();
+        // let right = Vector3::new(right.x, right.y, 0.0);
         state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
         state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
-
-        let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
-        state.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
+        //
+        state.position += forward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
-
+        //
         state.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
         if state.position.z < 0.4 { state.position.z = 0.4; }
+        //
+        let yaw =  Quaternion::from_angle_z(Rad(-self.rotate_horizontal) * self.sensitivity * dt);
+        // let yaw =  Quaternion::from_axis_angle(Vector3::unit_z(), Rad(-self.rotate_horizontal) * self.sensitivity * dt);
+        let pitch =  Quaternion::from_angle_x(Rad(-self.rotate_vertical) * self.sensitivity * dt);
+        
+        // let arc = Quaternion::from_arc(Vector3::unit_z(), Vector3::unit_x(), None);
+        //
+        self.rotate_horizontal = 0.0;
+        self.rotate_vertical = 0.0;
+        state.rotation = yaw * state.rotation * pitch;
 
-        rotation.y += Rad(self.rotate_horizontal) * self.sensitivity * dt;
-        rotation.x += Rad(-self.rotate_vertical) * self.sensitivity * dt;
-        // rotation.x = rotation.x.max(-Rad(SAFE_FRAC_PI_2)).min(Rad(SAFE_FRAC_PI_2));
+    }
 
+    pub fn update_orbit(&mut self, state: &mut CameraState, dt: Duration) 
+    {
+        let dt = dt.as_secs_f32();
+        let forward = (state.rotation * Vector3::unit_y());
+        let right = state.rotation * Vector3::unit_x();
+
+        // let right = Vector3::new(right.x, right.y, 0.0);
+        // state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
+        // state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+        //
+        state.position += forward * self.scroll * self.speed * self.sensitivity * dt;
+        self.scroll = 0.0;
+        //
+        state.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
+        if state.position.z < 0.4 { state.position.z = 0.4; }
+        //
+        let yaw =  Quaternion::from_angle_z(Rad(-self.rotate_horizontal) * self.sensitivity * dt);
+        // let yaw =  Quaternion::from_axis_angle(Vector3::unit_z(), Rad(-self.rotate_horizontal) * self.sensitivity * dt);
+        let pitch =  Quaternion::from_angle_x(Rad(-self.rotate_vertical) * self.sensitivity * dt);
+        
+        // let arc = Quaternion::from_arc(Vector3::unit_z(), Vector3::unit_x(), None);
+        //
         self.rotate_horizontal = 0.0;
         self.rotate_vertical = 0.0;
 
-        if rotation.x < -Rad(SAFE_FRAC_PI_2) { rotation.x = -Rad(SAFE_FRAC_PI_2); } 
-        else if rotation.x > Rad(SAFE_FRAC_PI_2) { rotation.x = Rad(SAFE_FRAC_PI_2); }    
-        state.rotation = Quaternion::from(rotation);
-    }
+        let rotation = yaw * state.rotation * pitch;
+        let rot = Matrix4::from(rotation);
+        let trans = Matrix4::from_translation(state.position.to_vec());
+        let mat = trans * rot;
+        state.position = Point3::new(mat.x.w, mat.y.w, mat.z.w);
+        state.rotation = Quaternion::from(Matrix3::from_cols(mat.x.truncate(), mat.y.truncate(), mat.z.truncate()));
 
-    // pub fn update_orbit(&mut self, state: &mut CameraState, dt: Duration) 
-    // {
-    //     let dt = dt.as_secs_f32();
-    //     let mut rotation = Euler::from(state.rotation);
-    //     let (yaw_sin, yaw_cos) = rotation.y.sin_cos();
-    //     let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
-    //     let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
-    //     let (pitch_sin, pitch_cos) = rotation.x.sin_cos();
-    //     
-    //     let cam_as_mat = Matrix4::look_to_rh(
-    //         state.position,
-    //         Vector3::new(
-    //             cos_pitch * sin_yaw,
-    //             cos_pitch * cos_yaw,
-    //             sin_pitch,
-    //         ).normalize(),
-    //         Vector3::unit_z(),
-    //     );
-    //     let transform = Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0))
-    //     
-    //     state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-    //     state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
-    //
-    //     let scrollward = Vector3::unit_z(); 
-    //     state.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
-    //     self.scroll = 0.0;
-    // }
+    }
 
     // pub fn update_2d(&mut self, state: &mut CameraState, dt: Duration) 
     // {

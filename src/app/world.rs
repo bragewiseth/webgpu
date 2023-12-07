@@ -59,11 +59,11 @@ impl World
         let floor = floor_mesh.into_iter().next().unwrap();
 
 
-        const SPACE_BETWEEN: f32 = 10.0;
+        const SPACE_BETWEEN: f32 = 3.0;
         let sphere_instances = (0..3).map(|x| {
-                let x = SPACE_BETWEEN * (x as f32 - 3 as f32 / 2.0);
+                let x = SPACE_BETWEEN * (x as f32 - 1.0);
 
-                let position = cgmath::Vector3 { x, y: 0.0, z:5.0 } ;
+                let position = cgmath::Vector3 { x, y: 0.0, z:3.0 } ;
 
                 let rotation = if position.is_zero() {
                     cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
