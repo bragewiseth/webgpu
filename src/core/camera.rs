@@ -1,7 +1,7 @@
 use crate::core::renderer::Resource;
 
 
-use cgmath::*;
+use cgmath::{*, Matrix};
 use wgpu::util::DeviceExt;
 use winit::event::*;
 use winit::dpi::PhysicalPosition;
@@ -26,8 +26,7 @@ pub struct CameraState
 {
     pub position: Point3<f32>,
     pub rotation: Quaternion<f32>,
-    // pub yaw: Rad<f32>,
-    // pub pitch: Rad<f32>,
+    pub velocity: Vector3<f32>,
 }
 
 #[derive(Debug)]
@@ -79,13 +78,12 @@ impl Camera {
         });
 
 
-        let rotation = Quaternion::from(Euler::new(pitch.into(), yaw.into(), Rad(0.0)));
+        let rotation = Quaternion::from(Euler::new(pitch.into() - Rad(FRAC_PI_2), yaw.into(), Rad(0.0)));
         let state = CameraState 
         {
             position: position.into(),
             rotation,
-            // yaw: yaw.into(),
-            // pitch: pitch.into(),
+            velocity: Vector3::zero(),
         };
 
 
@@ -110,39 +108,77 @@ impl Camera {
     }
 
 
-    pub fn update_fps(&mut self , dt: Duration) 
+    pub fn update_fps(&mut self, dt: Duration) 
     {
-        self.controller.update_fps(&mut self.state ,dt);
+        let c = &mut self.controller;
+        let v = &mut self.state.velocity;
+        *v += (c.impulse * c.speed * 0.06 ) / (v.magnitude() + 1.0);
+        let dt = dt.as_secs_f32();
+        let forward = self.state.rotation * Vector3::unit_z();
+        let right = self.state.rotation * Vector3::unit_x();
+        let yaw =  Quaternion::from_angle_z(Rad(-c.rotate_horizontal) * c.sensitivity * dt);  // world z
+        let pitch =  Quaternion::from_angle_x(Rad(-c.rotate_vertical) * c.sensitivity * dt);  // world x
+
+        self.state.position += forward * v.z * c.speed * dt;
+        self.state.position += right * v.x * c.speed * dt;
+        self.state.position += forward * c.scroll * c.speed * c.sensitivity * dt;
+        let mut new_fovy = self.projection.fovy + Rad(1.0) * c.scroll * c.speed * c.sensitivity * dt * 0.1;
+        if new_fovy < Rad(0.1) { new_fovy = Rad(0.1); }
+        if new_fovy > Rad(1.5) { new_fovy = Rad(1.5); }
+        self.projection.set_fovy(new_fovy);
+        self.state.position.z += v.y * c.speed * dt;
+        if self.state.position.z < 0.4 { self.state.position.z = 0.4; }
+
+        c.scroll = 0.0;
+        c.rotate_horizontal = 0.0;
+        c.rotate_vertical = 0.0;
+        *v *= 0.9;
+        self.state.rotation = yaw * self.state.rotation * pitch; 
+
     }
 
-    pub fn update_orbit(&mut self , dt: Duration) 
+    pub fn update_orbit(&mut self, dt: Duration) 
     {
-        self.controller.update_fps(&mut self.state ,dt);
+        let c = &mut self.controller;
+        let v = &mut self.state.velocity;
+        *v += (c.impulse * c.speed * 0.06 ) / (v.magnitude() + 1.0);
+        let dt = dt.as_secs_f32();
+        let forward = self.state.rotation * Vector3::unit_z();
+        let yaw =  Quaternion::from_angle_z(Rad(-c.rotate_horizontal) * c.sensitivity * dt);                                        // world z
+        let pitch =  Quaternion::from_axis_angle(self.state.rotation * Vector3::unit_x(), Rad(-c.rotate_vertical) * c.sensitivity * dt); // current x
+        let rotation = yaw * pitch;
+        let point_as_quat = Quaternion::new(0.0, self.state.position.x, self.state.position.y, self.state.position.z);
+        let rotated_quat = rotation * point_as_quat * rotation.invert();
+        let rotated_point = Point3::new(rotated_quat.v.x, rotated_quat.v.y, rotated_quat.v.z);
+
+        self.state.position = rotated_point;
+        self.state.position += forward * v.z * c.speed * dt;
+        self.state.position.z += v.y * c.speed * dt;
+        self.state.position.x += v.x * c.speed * dt;
+        self.state.position.y += c.scroll * c.speed * c.sensitivity * dt;
+
+        c.scroll *= 0.0;
+        c.rotate_horizontal = 0.0;
+        c.rotate_vertical = 0.0;
+        *v *= 0.9;
+        self.state.rotation = rotation * self.state.rotation;
+
     }
+
+    pub fn update_2d(&mut self, dt: Duration) 
+    {
+    }
+
 
     pub fn calc_matrix(&self) -> Matrix4<f32> 
     {        
-        // let (sin_pitch, cos_pitch) = self.state.pitch.0.sin_cos();
-        // let (sin_yaw, cos_yaw) = self.state.yaw.0.sin_cos();
-
+        // world is z-up, camera is y-up z-forward
         Matrix4::look_to_rh
         (
             self.state.position,
-            -self.state.rotation * Vector3::unit_y(),
+            -self.state.rotation * Vector3::unit_z(),
             Vector3::unit_z(),
         )
-
-        // Matrix4::look_to_rh(
-        //     self.state.position,
-        //     Vector3::new(
-        //         cos_pitch * sin_yaw,
-        //         cos_pitch * cos_yaw,
-        //         sin_pitch,
-        //     ).normalize(),
-        //     Vector3::unit_z(),
-        // )
-
-        // Matrix4::from(self.state.rotation)
     }
 
 }
@@ -174,9 +210,16 @@ impl Projection {
         }
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, width: u32, height: u32) 
+    {
         self.aspect = width as f32 / height as f32;
     }
+
+    pub fn set_fovy(&mut self, fovy: Rad<f32>) 
+    {
+        self.fovy = fovy;
+    }
+
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
         OPENGL_TO_WGPU_MATRIX * perspective(self.fovy, self.aspect, self.znear, self.zfar)
@@ -188,28 +231,18 @@ impl Projection {
 #[derive(Debug)]
 pub struct CameraController 
 {
-    amount_left: f32,
-    amount_right: f32,
-    amount_forward: f32,
-    amount_backward: f32,
-    amount_up: f32,
-    amount_down: f32,
+    impulse: Vector3<f32>,
     rotate_horizontal: f32,
     rotate_vertical: f32,
     scroll: f32,
     speed: f32,
     sensitivity: f32,
 }
-
+ 
 impl CameraController {
     pub fn new(speed: f32, sensitivity: f32) -> Self {
         Self {
-            amount_left: 0.0,
-            amount_right: 0.0,
-            amount_forward: 0.0,
-            amount_backward: 0.0,
-            amount_up: 0.0,
-            amount_down: 0.0,
+            impulse: Vector3::zero(),
             rotate_horizontal: 0.0,
             rotate_vertical: 0.0,
             scroll: 0.0,
@@ -219,30 +252,33 @@ impl CameraController {
     }
 
     pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool{
-        let amount = if state == ElementState::Pressed { 1.0 } else { 0.0 };
+        let amount = match state {
+            ElementState::Pressed => 1.0,
+            ElementState::Released => 0.0,
+        };
         match key {
             VirtualKeyCode::W | VirtualKeyCode::Up => {
-                self.amount_forward = amount;
+                self.impulse.z = amount;
                 true
             }
             VirtualKeyCode::S | VirtualKeyCode::Down => {
-                self.amount_backward = amount;
+                self.impulse.z = -amount;
                 true
             }
             VirtualKeyCode::A | VirtualKeyCode::Left => {
-                self.amount_left = amount;
+                self.impulse.x = -amount;
                 true
             }
             VirtualKeyCode::D | VirtualKeyCode::Right => {
-                self.amount_right = amount;
+                self.impulse.x = amount;
                 true
             }
             VirtualKeyCode::Space => {
-                self.amount_up = amount;
+                self.impulse.y = amount;
                 true
             }
             VirtualKeyCode::LShift => {
-                self.amount_down = amount;
+                self.impulse.y = -amount;
                 true
             }
             _ => false,
@@ -264,82 +300,6 @@ impl CameraController {
             }) => *scroll as f32,
         };
     }
-
-    pub fn update_fps(&mut self, state: &mut CameraState, dt: Duration) {
-        let dt = dt.as_secs_f32();
-        let forward = (state.rotation * Vector3::unit_y());
-        let right = state.rotation * Vector3::unit_x();
-        // let right = Vector3::new(right.x, right.y, 0.0);
-        state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-        state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
-        //
-        state.position += forward * self.scroll * self.speed * self.sensitivity * dt;
-        self.scroll = 0.0;
-        //
-        state.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
-        if state.position.z < 0.4 { state.position.z = 0.4; }
-        //
-        let yaw =  Quaternion::from_angle_z(Rad(-self.rotate_horizontal) * self.sensitivity * dt);
-        // let yaw =  Quaternion::from_axis_angle(Vector3::unit_z(), Rad(-self.rotate_horizontal) * self.sensitivity * dt);
-        let pitch =  Quaternion::from_angle_x(Rad(-self.rotate_vertical) * self.sensitivity * dt);
-        
-        // let arc = Quaternion::from_arc(Vector3::unit_z(), Vector3::unit_x(), None);
-        //
-        self.rotate_horizontal = 0.0;
-        self.rotate_vertical = 0.0;
-        state.rotation = yaw * state.rotation * pitch;
-
-    }
-
-    pub fn update_orbit(&mut self, state: &mut CameraState, dt: Duration) 
-    {
-        let dt = dt.as_secs_f32();
-        let forward = (state.rotation * Vector3::unit_y());
-        let right = state.rotation * Vector3::unit_x();
-
-        // let right = Vector3::new(right.x, right.y, 0.0);
-        // state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-        // state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
-        //
-        state.position += forward * self.scroll * self.speed * self.sensitivity * dt;
-        self.scroll = 0.0;
-        //
-        state.position.z += (self.amount_up - self.amount_down) * self.speed * dt;
-        if state.position.z < 0.4 { state.position.z = 0.4; }
-        //
-        let yaw =  Quaternion::from_angle_z(Rad(-self.rotate_horizontal) * self.sensitivity * dt);
-        // let yaw =  Quaternion::from_axis_angle(Vector3::unit_z(), Rad(-self.rotate_horizontal) * self.sensitivity * dt);
-        let pitch =  Quaternion::from_angle_x(Rad(-self.rotate_vertical) * self.sensitivity * dt);
-        
-        // let arc = Quaternion::from_arc(Vector3::unit_z(), Vector3::unit_x(), None);
-        //
-        self.rotate_horizontal = 0.0;
-        self.rotate_vertical = 0.0;
-
-        let rotation = yaw * state.rotation * pitch;
-        let rot = Matrix4::from(rotation);
-        let trans = Matrix4::from_translation(state.position.to_vec());
-        let mat = trans * rot;
-        state.position = Point3::new(mat.x.w, mat.y.w, mat.z.w);
-        state.rotation = Quaternion::from(Matrix3::from_cols(mat.x.truncate(), mat.y.truncate(), mat.z.truncate()));
-
-    }
-
-    // pub fn update_2d(&mut self, state: &mut CameraState, dt: Duration) 
-    // {
-    //     let dt = dt.as_secs_f32();
-    //     // Move forward/backward and left/right
-    //     let (yaw_sin, yaw_cos) = state.yaw.0.sin_cos();
-    //     let forward = Vector3::new(yaw_sin, yaw_cos, 0.0).normalize(); // Adjusted for Z-up
-    //     let right = Vector3::new(yaw_cos, -yaw_sin, 0.0).normalize();  // Adjusted for Z-up
-    //     state.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-    //     state.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
-    //
-    //     let (pitch_sin, pitch_cos) = state.pitch.0.sin_cos();
-    //     let scrollward = Vector3::new(pitch_cos * yaw_sin, pitch_cos * yaw_cos, pitch_sin).normalize(); // Adjusted for Z-up
-    //     state.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
-    //     self.scroll = 0.0;
-    // }
 }
 
 
