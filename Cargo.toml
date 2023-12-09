@@ -3,7 +3,6 @@ name = "fstop"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 cfg-if = "1"
@@ -14,7 +13,7 @@ wgpu = "0.18"
 pollster = "0.3"
 bytemuck = { version = "1.12", features = [ "derive" ] }
 cgmath = "0.18"
-anyhow = "1.0" # NEW!
+anyhow = "1.0" 
 instant = "0.1"
 tobj = { version = "3.2.1", features = [
     "async",

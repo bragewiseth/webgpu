@@ -3,7 +3,6 @@ use crate::core::renderer;
 use crate::core::texture;
 
 
-
 use std::io::{BufReader, Cursor};
 use cfg_if::cfg_if;
 use wgpu::util::DeviceExt;

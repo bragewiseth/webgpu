@@ -1,7 +1,6 @@
-use crate::core::renderer::Resource;
 
 
-use cgmath::{*, Matrix};
+use cgmath::*;
 use wgpu::util::DeviceExt;
 use winit::event::*;
 use winit::dpi::PhysicalPosition;
@@ -112,12 +111,12 @@ impl Camera {
     {
         let c = &mut self.controller;
         let v = &mut self.state.velocity;
-        *v += (c.impulse * c.speed * 0.06 ) / (v.magnitude() + 1.0);
+        *v += (c.force * c.speed * 0.06 ) / (v.magnitude() + 1.0);
         let dt = dt.as_secs_f32();
         let forward = self.state.rotation * Vector3::unit_z();
         let right = self.state.rotation * Vector3::unit_x();
-        let yaw =  Quaternion::from_angle_z(Rad(-c.rotate_horizontal) * c.sensitivity * dt);  // world z
-        let pitch =  Quaternion::from_angle_x(Rad(-c.rotate_vertical) * c.sensitivity * dt);  // world x
+        let yaw =  Quaternion::from_angle_z(Rad(-c.mouse_dx) * c.sensitivity * dt);  // world z
+        let pitch =  Quaternion::from_angle_x(Rad(-c.mouse_dy) * c.sensitivity * dt);  // world x
 
         self.state.position += forward * v.z * c.speed * dt;
         self.state.position += right * v.x * c.speed * dt;
@@ -130,8 +129,8 @@ impl Camera {
         if self.state.position.z < 0.4 { self.state.position.z = 0.4; }
 
         c.scroll = 0.0;
-        c.rotate_horizontal = 0.0;
-        c.rotate_vertical = 0.0;
+        c.mouse_dx = 0.0;
+        c.mouse_dy = 0.0;
         *v *= 0.9;
         self.state.rotation = yaw * self.state.rotation * pitch; 
 
@@ -141,11 +140,11 @@ impl Camera {
     {
         let c = &mut self.controller;
         let v = &mut self.state.velocity;
-        *v += (c.impulse * c.speed * 0.06 ) / (v.magnitude() + 1.0);
+        *v += (c.force * c.speed * 0.06 ) / (v.magnitude() + 1.0);
         let dt = dt.as_secs_f32();
         let forward = self.state.rotation * Vector3::unit_z();
-        let yaw =  Quaternion::from_angle_z(Rad(-c.rotate_horizontal) * c.sensitivity * dt);                                        // world z
-        let pitch =  Quaternion::from_axis_angle(self.state.rotation * Vector3::unit_x(), Rad(-c.rotate_vertical) * c.sensitivity * dt); // current x
+        let yaw =  Quaternion::from_angle_z(Rad(-c.mouse_dx) * c.sensitivity * dt);                                             // world z
+        let pitch =  Quaternion::from_axis_angle(self.state.rotation * Vector3::unit_x(), Rad(-c.mouse_dy) * c.sensitivity * dt); // current x
         let rotation = yaw * pitch;
         let point_as_quat = Quaternion::new(0.0, self.state.position.x, self.state.position.y, self.state.position.z);
         let rotated_quat = rotation * point_as_quat * rotation.invert();
@@ -158,8 +157,8 @@ impl Camera {
         self.state.position.y += c.scroll * c.speed * c.sensitivity * dt;
 
         c.scroll *= 0.0;
-        c.rotate_horizontal = 0.0;
-        c.rotate_vertical = 0.0;
+        c.mouse_dx = 0.0;
+        c.mouse_dy = 0.0;
         *v *= 0.9;
         self.state.rotation = rotation * self.state.rotation;
 
@@ -167,6 +166,33 @@ impl Camera {
 
     pub fn update_2d(&mut self, dt: Duration) 
     {
+        let c = &mut self.controller;
+        let v = &mut self.state.velocity;
+        *v += (c.force * c.speed * 0.06 ) / (v.magnitude() + 1.0);
+        let dt = dt.as_secs_f32();
+        let forward = self.state.rotation * Vector3::unit_z();
+        let right = self.state.rotation * Vector3::unit_x();
+        let up = self.state.rotation * Vector3::unit_y();
+        let yaw =  Quaternion::from_angle_z(Rad(-c.mouse_dx) * c.sensitivity * dt);  // world z
+        let pitch =  Quaternion::from_angle_x(Rad(-c.mouse_dy) * c.sensitivity * dt);  // world x
+
+        // self.state.position += forward * v.z * c.speed * dt;
+        // self.state.position += right * v.x * c.speed * dt;
+        // self.state.position += forward * c.scroll * c.speed * c.sensitivity * dt;
+        // self.state.position += up * v.y * c.speed * c.sensitivity * dt;
+        self.state.position.x = c.mouse_pos.x as f32;
+        self.state.position.z = c.mouse_pos.y as f32;
+        let mut new_fovy = self.projection.fovy + Rad(1.0) * c.scroll * c.speed * c.sensitivity * dt * 0.1;
+        if new_fovy < Rad(0.1) { new_fovy = Rad(0.1); }
+        if new_fovy > Rad(1.5) { new_fovy = Rad(1.5); }
+        self.projection.set_fovy(new_fovy);
+        // self.state.position.z += v.y * c.speed * dt;
+        // if self.state.position.z < 0.4 { self.state.position.z = 0.4; }
+        c.scroll = 0.0;
+        c.mouse_dx = 0.0;
+        c.mouse_dy = 0.0;
+        *v *= 0.9;
+        // self.state.rotation = yaw * self.state.rotation * pitch;
     }
 
 
@@ -231,9 +257,10 @@ impl Projection {
 #[derive(Debug)]
 pub struct CameraController 
 {
-    impulse: Vector3<f32>,
-    rotate_horizontal: f32,
-    rotate_vertical: f32,
+    force: Vector3<f32>,
+    mouse_dx: f32,
+    mouse_dy: f32,
+    mouse_pos: PhysicalPosition<f64>,
     scroll: f32,
     speed: f32,
     sensitivity: f32,
@@ -242,9 +269,10 @@ pub struct CameraController
 impl CameraController {
     pub fn new(speed: f32, sensitivity: f32) -> Self {
         Self {
-            impulse: Vector3::zero(),
-            rotate_horizontal: 0.0,
-            rotate_vertical: 0.0,
+            force: Vector3::zero(),
+            mouse_dx: 0.0,
+            mouse_dy: 0.0,
+            mouse_pos: PhysicalPosition::new(0.0, 0.0),
             scroll: 0.0,
             speed,
             sensitivity,
@@ -258,27 +286,27 @@ impl CameraController {
         };
         match key {
             VirtualKeyCode::W | VirtualKeyCode::Up => {
-                self.impulse.z = amount;
+                self.force.z = amount;
                 true
             }
             VirtualKeyCode::S | VirtualKeyCode::Down => {
-                self.impulse.z = -amount;
+                self.force.z = -amount;
                 true
             }
             VirtualKeyCode::A | VirtualKeyCode::Left => {
-                self.impulse.x = -amount;
+                self.force.x = -amount;
                 true
             }
             VirtualKeyCode::D | VirtualKeyCode::Right => {
-                self.impulse.x = amount;
+                self.force.x = amount;
                 true
             }
             VirtualKeyCode::Space => {
-                self.impulse.y = amount;
+                self.force.y = amount;
                 true
             }
             VirtualKeyCode::LShift => {
-                self.impulse.y = -amount;
+                self.force.y = -amount;
                 true
             }
             _ => false,
@@ -286,8 +314,14 @@ impl CameraController {
     }
 
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rotate_horizontal = mouse_dx as f32;
-        self.rotate_vertical = mouse_dy as f32;
+        self.mouse_dx = mouse_dx as f32;
+        self.mouse_dy = mouse_dy as f32;
+    }
+
+
+    pub fn process_mouse_pos(&mut self, x:f64, y:f64 ) {
+        self.mouse_pos.x = x as f64;
+        self.mouse_pos.y = y as f64;
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {

@@ -357,7 +357,7 @@ pub enum PipelineBuffers
 }
 
 
-pub struct RenderPipeline
+pub struct RenderPipelineWrapper
 {
     pub pipeline: wgpu::RenderPipeline,
     pub resources: Vec<PipelineResources>,
@@ -367,7 +367,7 @@ pub struct RenderPipeline
 
 
 
-impl RenderPipeline
+impl RenderPipelineWrapper
 {
     pub fn new(
         device : &wgpu::Device, 
@@ -384,19 +384,19 @@ impl RenderPipeline
         {
             match x
             {
-                PipelineResources::Camera => { &layouts.camera },
-                PipelineResources::Material => { &layouts.material },
-                PipelineResources::Framebuffer => { &layouts.framebuffer },
+                PipelineResources::Camera =>        { &layouts.camera },
+                PipelineResources::Material =>      { &layouts.material },
+                PipelineResources::Framebuffer =>   { &layouts.framebuffer },
             }
         }).collect();
         let buffers : Vec<wgpu::VertexBufferLayout<'static>> = vertex_buffers.iter().map(|x| 
         {
             match x
             {
-                PipelineBuffers::Model => { ModelVertex::desc() },
-                PipelineBuffers::Instance => { InstanceRaw::desc() },
-                PipelineBuffers::VertexOnly => { VertexOnly::desc() },
-                PipelineBuffers::VertexUV => { VertexUV::desc() },
+                PipelineBuffers::Model =>       { ModelVertex::desc() },
+                PipelineBuffers::Instance =>    { InstanceRaw::desc() },
+                PipelineBuffers::VertexOnly =>  { VertexOnly::desc() },
+                PipelineBuffers::VertexUV =>    { VertexUV::desc() },
             }
         }).collect();
 
@@ -414,8 +414,8 @@ impl RenderPipeline
             ds =  Some(wgpu::DepthStencilState {
                 format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less, // 1.
-                stencil: wgpu::StencilState::default(), // 2.
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             })
         }
@@ -437,12 +437,12 @@ impl RenderPipeline
                 },
                 fragment: Some(
                     wgpu::FragmentState 
-                    { // 3.
+                    {
                         module: &shader,
                         entry_point: "fs_main",
                         targets: &[Some(
                             wgpu::ColorTargetState 
-                            { // 4.
+                            {
                                 format: config.format,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: wgpu::ColorWrites::ALL
@@ -467,7 +467,7 @@ impl RenderPipeline
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
-                multiview: None, // 5.
+                multiview: None,
             }
         );
         Self { pipeline, resources, vertex_buffers }
@@ -478,6 +478,90 @@ impl RenderPipeline
 
 
 // RENDERPASS {{{
+#[macro_export]
+macro_rules! create_render_pass {
+    // Plain render pass with no parameters
+    ($encoder:expr, $view:expr ) => {
+        $encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Simple Pass"),
+                color_attachments: &[Some(
+                    wgpu::RenderPassColorAttachment 
+                    {
+                        view: &$view,
+                        resolve_target: None,
+                        ops: wgpu::Operations 
+                        {
+                            load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0, }   ),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }
+                )],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+        })
+    };
+    // Render pass with framebuffer parameter
+    // ($encoder:expr, $framebuffer:expr) => {
+    //     let depth_stencil_attachment = match &$framebuffer.depth_texture {
+    //         Some(texture) => Some(wgpu::RenderPassDepthStencilAttachment {
+    //             view: &texture.view,
+    //             depth_ops: Some(wgpu::Operations {
+    //                 load: wgpu::LoadOp::Clear(1.0),
+    //                 store: wgpu::StoreOp::Store,
+    //             }),
+    //             stencil_ops: None,
+    //         }),
+    //         None => None,
+    //     };
+    //     $encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    //         label: Some("Buffer Pass"),
+    //         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+    //             view: &$framebuffer.texture.as_ref().unwrap().view,
+    //             resolve_target: None,
+    //             ops: wgpu::Operations {
+    //                 load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 0.0, }),
+    //                 store: wgpu::StoreOp::Store,
+    //             },
+    //         })],
+    //         depth_stencil_attachment: depth_stencil_attachment,
+    //         timestamp_writes: None,
+    //         occlusion_query_set: None,
+    //     })
+    // };
+
+    ($encoder:expr, $view:expr, $z_buffer:expr) => {
+    $encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Simple Pass"),
+            color_attachments: &[Some(
+                wgpu::RenderPassColorAttachment 
+                {
+                    view: &$view,
+                    resolve_target: None,
+                    ops: wgpu::Operations 
+                    {
+                        load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0, }   ),
+                        store: wgpu::StoreOp::Store,
+                    },
+                }
+            )],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &$z_buffer.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+        })
+    };
+}
+
+
+
+
 pub struct Framebuffer
 {
     pub texture: Option<Texture>,
@@ -515,20 +599,10 @@ impl Framebuffer
 pub trait Draw<'a>
 {
 
-    fn draw_pipeline_instanced(
+    fn set_pipeline_and_bindgroups(
         &mut self, 
-        pipeline: &'a RenderPipeline, 
-        model : &'a Model, 
-        materials : &'a Vec<Material>,
-        instances : &'a Instances,
-        num_instances: Range<u32>,
-        camera: &'a wgpu::BindGroup) -> ();
-
-    fn draw_pipeline(
-        &mut self, 
-        pipeline: &'a RenderPipeline, 
-        model : &'a Model, 
-        materials : &'a Vec<Material>,
+        pipeline: &'a RenderPipelineWrapper, 
+        materials : &'a Material,
         camera: &'a wgpu::BindGroup) -> ();
 
     fn draw_mesh(
@@ -543,96 +617,29 @@ pub trait Draw<'a>
         instances: &'a Instances,
         num_instances: Range<u32>,
     );
-
-
-    fn draw_model(
-        &mut self,
-        model: &'a Model,
-        materials : &'a Vec<Material>,
-    );
-
-
-    fn draw_model_instanced(
-        &mut self,
-        model: &'a Model,
-        materials : &'a Vec<Material>,
-        instances: &'a Instances,
-        num_instances: Range<u32>,
-    );
-
 }
 
-// future work here, convert draw_pipeline to -> set pipeline and bind grupos so it is more flexible and bind gropus dont get messed up
 
 impl<'a, 'b> Draw<'b> for wgpu::RenderPass<'a>
 where
     'b: 'a,
 {
-    fn draw_pipeline_instanced(
-        &mut self, 
-        pipeline : &'b RenderPipeline, 
-        model : &'b Model, 
-        materials : &'b Vec<Material>,
-        instances : &'b Instances,
-        num_instances: Range<u32>,
-        camera: &'b wgpu::BindGroup) -> ()
+    fn set_pipeline_and_bindgroups(
+            &mut self, 
+            pipeline: &'b RenderPipelineWrapper, 
+            material : &'b Material,
+            camera: &'b wgpu::BindGroup) -> ()
     {
-        let mat = &materials[model.materials[0] as usize];
         self.set_pipeline(&pipeline.pipeline);
         for (i,resource) in pipeline.resources.iter().enumerate()
         {
             match resource
             {
                 PipelineResources::Camera => { self.set_bind_group(i as u32, camera, &[]); },
-                PipelineResources::Material => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
-                PipelineResources::Framebuffer => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
+                PipelineResources::Material => { self.set_bind_group(i as u32, &material.bind_group, &[]); },
+                PipelineResources::Framebuffer => { self.set_bind_group(i as u32, &material.bind_group, &[]); },
             }
         }
-        for (i,buffer) in pipeline.vertex_buffers.iter().enumerate()
-        {
-            match buffer
-            {
-                PipelineBuffers::Model => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
-                PipelineBuffers::Instance => { self.set_vertex_buffer(i as u32 , instances.buffer.slice(..)); },
-                PipelineBuffers::VertexOnly => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
-                PipelineBuffers::VertexUV => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
-            }
-        }
-        self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.draw_indexed(0..model.meshes[0].num_elements, 0, num_instances);
-    }
-
-
-    fn draw_pipeline(
-        &mut self, 
-        pipeline : &'b RenderPipeline, 
-        model : &'b Model, 
-        materials : &'b Vec<Material>,
-        camera: &'b wgpu::BindGroup) -> ()
-    {
-        let mat = &materials[model.materials[0] as usize];
-        self.set_pipeline(&pipeline.pipeline);
-        for (i,resource) in pipeline.resources.iter().enumerate()
-        {
-            match resource
-            {
-                PipelineResources::Camera => { self.set_bind_group(i as u32, camera, &[]); },
-                PipelineResources::Material => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
-                PipelineResources::Framebuffer => { self.set_bind_group(i as u32, &mat.bind_group, &[]); },
-            }
-        }
-        for (i,buffer) in pipeline.vertex_buffers.iter().enumerate()
-        {
-            match buffer
-            {
-                PipelineBuffers::Model => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
-                PipelineBuffers::Instance => { },
-                PipelineBuffers::VertexOnly => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
-                PipelineBuffers::VertexUV => { self.set_vertex_buffer(i as u32, model.meshes[0].vertex_buffer.slice(..)); },
-            }
-        }
-        self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.draw_indexed(0..model.meshes[0].num_elements, 0, 0..1);
     }
 
 
@@ -656,68 +663,7 @@ where
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.draw_indexed(0..mesh.num_elements, 0, num_instances);
     }
-
-    fn draw_model(
-        &mut self,
-        model: &'b Model,
-        materials : &'b Vec<Material>,) 
-    {
-        let mat = &materials[model.materials[0] as usize];
-        self.set_vertex_buffer(0, model.meshes[0].vertex_buffer.slice(..));
-        self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(1, &mat.bind_group, &[]);
-        self.draw_indexed(0..model.meshes[0].num_elements, 0, 0..1);
-    }
-
-    fn draw_model_instanced(
-        &mut self,
-        model: &'b Model,
-        materials : &'b Vec<Material>,
-        instances: &'b Instances,
-        num_instances: Range<u32>,)
-    {
-        let mat = &materials[model.materials[0] as usize];
-        self.set_vertex_buffer(0, model.meshes[0].vertex_buffer.slice(..));
-        self.set_vertex_buffer(1, instances.buffer.slice(..));
-        self.set_index_buffer(model.meshes[0].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(1, &mat.bind_group, &[]);
-        self.draw_indexed(0..model.meshes[0].num_elements, 0, num_instances);
-    }
-
-
-
 }
-
-
-// fn splashscreen(window : &winit::window::Window, device : &wgpu::Device, queue : &wgpu::Queue, sc_desc : &wgpu::SwapChainDescriptor, format : wgpu::TextureFormat) -> Texture
-// {
-//     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Splashscreen Encoder") });
-//     let texture = Texture::from_bytes(device, queue, include_bytes!("../../assets/fstopwhite.png"), "splashscreen.png").unwrap();
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-//     let mut staging_belt = wgpu::util::StagingBelt::new(1024);
-// }
-    
-
 
 // end RENDERPASS }}}
 

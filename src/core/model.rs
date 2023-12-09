@@ -7,8 +7,6 @@ use wgpu::util::DeviceExt;
 
 
 
-
-
 // MESH {{{
 pub struct Mesh 
 {
@@ -51,6 +49,7 @@ impl Mesh {
 
 
 // }}}
+
 
 // MATERIAL {{{
 pub struct Material 

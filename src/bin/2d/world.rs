@@ -1,6 +1,6 @@
-use crate::core::model::{Model, Instances, Instance, Mesh, Material  };
-use crate::core::renderer:: BindGroupLayouts ;
-use crate::core::assets;
+use fstop::model::{Model, Instances, Instance, Mesh, Material  };
+use fstop::renderer:: BindGroupLayouts ;
+use fstop::assets;
 
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
@@ -63,13 +63,9 @@ impl World
         let sphere_instances = (0..3).map(|x| {
                 let x = SPACE_BETWEEN * (x as f32 - 1.0);
 
-                let position = cgmath::Vector3 { x, y: 0.0, z:1.0 } ;
+                let position = cgmath::Vector3 { x, y: 0.0, z:0.0 } ;
 
-                let rotation = if position.is_zero() {
-                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-                } else {
-                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                };
+                let rotation = cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_x(), cgmath::Deg(90.0));
                 let scale = cgmath::Vector3 { x: 1.0, y: 1.0, z: 1.0 };
                 Instance { position, rotation, scale }
         }).collect::<Vec<_>>();
@@ -153,3 +149,4 @@ impl World
 
     }
 }
+
