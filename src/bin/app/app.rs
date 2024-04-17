@@ -1,4 +1,3 @@
-// imports {{{
 use crate::world;
 use fstop::core::engine::WindowState;
 use fstop::create_render_pass;
@@ -28,7 +27,6 @@ use fstop::core::renderer::{
 use winit::window::Window;
 use winit::event::*;
 use winit::window::CursorGrabMode;
-// }}}
 
 
 const PIXEL_SIZE : u32 = 1;
@@ -54,7 +52,6 @@ pub struct Engine
 
 impl Engine
 {
-    // new {{{
     pub async fn new(window_state:WindowState, device:wgpu::Device, queue:wgpu::Queue) -> Self 
     { 
         let config = &window_state.config; 
@@ -158,17 +155,15 @@ impl Engine
             screenquad,
             mouse_locked: false,
         }
-    } // end new }}}
+    }
 
 
-// window {{{
     pub fn window(&self) -> &Window
     { 
         &self.window_state.window
-    } // end window }}}
+    }
 
 
-// resize {{{
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>)
     { 
         if new_size.width > 0 && new_size.height > 0 
@@ -202,10 +197,9 @@ impl Engine
             self.pixelframebuffer.bind_group = Some(Framebuffer::make_bind_group(&self.device, &self.layouts, self.pixelframebuffer.texture.as_ref().unwrap(), 
                 self.pixelframebuffer.depth_texture.as_ref().unwrap()));
         }
-    } // end resize }}}
+    }
 
 
-// window input {{{
     pub fn window_input(&mut self, event: &WindowEvent) -> bool
     { 
         match event 
@@ -255,10 +249,9 @@ impl Engine
             }
             _ => false,
         }
-    } // end window input }}}
+    }
 
 
-// device input {{{
     pub fn device_input(&mut self, event : &DeviceEvent) -> bool
     { 
         match event
@@ -270,24 +263,22 @@ impl Engine
             }
             _ => false,
         }
-    } // end device input }}}
+    }
 
 
-// update {{{
     pub fn update(&mut self, dt: instant::Duration, time: instant::Instant)
     { 
-        // self.camera.update_orbit(dt);
-        self.camera.update_fps(dt);
+        self.camera.update_orbit(dt);
+        // self.camera.update_fps(dt);
         self.camera.update_view_proj();
         self.queue.write_buffer(&self.camera.buffer, 0, bytemuck::cast_slice(&[self.camera.uniform]));
 
         // self.world.sphere_instances.instances[0].position = cgmath::Vector3::new(0.0, 0.0, t * 1.0); 
         // let instance_data = self.world.sphere_instances.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
         // self.queue.write_buffer(&self.world.sphere_instances.buffer, 0, bytemuck::cast_slice(&instance_data));
-    } // end update }}}
+    }
 
 
-// render {{{
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> 
     { 
         let output = self.window_state.surface.get_current_texture()?;
@@ -351,5 +342,5 @@ impl Engine
         output.present();
 
         Ok(())
-    } // end render }}}
+    }
 }
