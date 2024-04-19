@@ -40,11 +40,7 @@ pub struct Camera {
 
 
 impl Camera {
-    pub fn new<
-        V: Into<Point3<f32>>,
-        Y: Into<Rad<f32>>,
-        P: Into<Rad<f32>>,
-    >(
+    pub fn new< V: Into<Point3<f32>>, Y: Into<Rad<f32>>, P: Into<Rad<f32>>, >(
         position: V,
         yaw: Y,
         pitch: P,
@@ -55,26 +51,26 @@ impl Camera {
     ) -> Self
     {
         
-        let camera_uniform = CameraUniform::new();
-
-        let camera_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Buffer"),
-                contents: bytemuck::cast_slice(&[camera_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            }
-        );
-
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0, resource: camera_buffer.as_entire_binding(),
-                }
-            ],
-            label: Some("camera_bind_group"),
-        });
+        // let camera_uniform = CameraUniform::new();
+        //
+        // let camera_buffer = device.create_buffer_init(
+        //     &wgpu::util::BufferInitDescriptor {
+        //         label: Some("Camera Buffer"),
+        //         contents: bytemuck::cast_slice(&[camera_uniform]),
+        //         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        //     }
+        // );
+        //
+        //
+        // let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        //     layout: bind_group_layout,
+        //     entries: &[
+        //         wgpu::BindGroupEntry {
+        //             binding: 0, resource: camera_buffer.as_entire_binding(),
+        //         }
+        //     ],
+        //     label: Some("camera_bind_group"),
+        // });
 
 
         let rotation = Quaternion::from(Euler::new(pitch.into() - Rad(FRAC_PI_2), yaw.into(), Rad(0.0)));
@@ -135,6 +131,7 @@ impl Camera {
         self.state.rotation = yaw * self.state.rotation * pitch; 
 
     }
+
 
     pub fn update_orbit(&mut self, dt: Duration) 
     {
@@ -251,6 +248,7 @@ impl Projection {
         OPENGL_TO_WGPU_MATRIX * perspective(self.fovy, self.aspect, self.znear, self.zfar)
     }
 }
+
 
 
 

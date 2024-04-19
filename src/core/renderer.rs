@@ -198,10 +198,9 @@ impl VertexBuffer for ModelVertex {
             ],
         }
     }
-} // end VERTEX BUFFER LAYOUTS  }}}
+}
 
 
-// BIND GROUP LAYOUTS {{{
 pub trait Resource
 {
     fn desc(device : &wgpu::Device) -> wgpu::BindGroupLayout;
@@ -219,23 +218,26 @@ impl Resource for Camera
 {
     fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
     {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry 
-                {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX ,
-                    ty: wgpu::BindingType::Buffer 
+        device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor 
+            {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry 
                     {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ],
-            label: Some("camera_bind_group_layout"),
-        })
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX ,
+                        ty: wgpu::BindingType::Buffer 
+                        {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }
+                ],
+                label: Some("camera_bind_group_layout"),
+            }
+        )
     }
 }
 
@@ -321,10 +323,8 @@ impl Resource for Framebuffer
         })
     }
 }
-// end BIND GROUP LAYOUTS }}}
 
 
-// PIPELINES {{{
 
 // enum PipelineType
 // {
@@ -474,10 +474,8 @@ impl RenderPipelineWrapper
     }
 
 }
-// end PIPELINES }}}
 
 
-// RENDERPASS {{{
 #[macro_export]
 macro_rules! create_render_pass {
     // Plain render pass with no parameters
@@ -531,8 +529,8 @@ macro_rules! create_render_pass {
     // };
 
     ($encoder:expr, $view:expr, $z_buffer:expr) => {
-    $encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Simple Pass"),
+        $encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Simple Pass"),
             color_attachments: &[Some(
                 wgpu::RenderPassColorAttachment 
                 {
@@ -544,7 +542,7 @@ macro_rules! create_render_pass {
                         store: wgpu::StoreOp::Store,
                     },
                 }
-            )],
+                )],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &$z_buffer.view,
                     depth_ops: Some(wgpu::Operations {

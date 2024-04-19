@@ -7,7 +7,6 @@ use wgpu::util::DeviceExt;
 
 
 
-// MESH {{{
 pub struct Mesh 
 {
     pub name: String,
@@ -48,10 +47,8 @@ impl Mesh {
 
 
 
-// }}}
 
 
-// MATERIAL {{{
 pub struct Material 
 {
     pub name: String,
@@ -68,24 +65,22 @@ pub struct Color
 {
     pub color: [f32; 4],
 }
-// }}}
 
 
-// MODEL {{{
 pub struct Model 
 {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<u32>,
-} // }}}
+}
 
 
-// INSTANCING {{{
 pub struct Instance 
 {
     pub position: cgmath::Vector3<f32>,
     pub rotation: cgmath::Quaternion<f32>,
     pub scale: cgmath::Vector3<f32>,
 }
+
 
 
 impl Instance {
@@ -106,4 +101,3 @@ pub struct Instances
     pub instances: Vec<Instance>,
     pub buffer: wgpu::Buffer,
 } 
-// }}}

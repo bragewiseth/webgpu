@@ -216,7 +216,7 @@ impl Engine
                 if self.mouse_locked == false
                 {
                     self.window_state.window.set_cursor_grab(CursorGrabMode::Confined).or_else(|_| 
-                        self.window_state.window.set_cursor_grab(CursorGrabMode::Locked)).unwrap();
+                    self.window_state.window.set_cursor_grab(CursorGrabMode::Locked)).unwrap();
                     self.window_state.window.set_cursor_visible(false);
                     self.mouse_locked = true; 
                 }
@@ -239,12 +239,10 @@ impl Engine
             } => 
             { 
                 self.camera.controller.process_keyboard(*key, *state);
-                // self.window.set_title(&format!("{:?}", self.camera.position));
                 true
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.camera.controller.process_scroll(delta);
-                // self.window.set_title(&format!("{:?}", self.camera.position));
                 true
             }
             _ => false,
@@ -279,6 +277,10 @@ impl Engine
     }
 
 
+
+
+
+    // move render stuff here
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> 
     { 
         let output = self.window_state.surface.get_current_texture()?;
