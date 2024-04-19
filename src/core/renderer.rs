@@ -1,87 +1,182 @@
-// This file contains layouts for gpu input
+/**
+ this module is responsible for rendering the scene
+ it contains all the necessary bindings and structures that the graphics pipeline needs
+ having all the gpu related stuff in one place makes it easier to see what the pipeline is doing and its dependencies
+ if i were to build a render pass i need to know what resources it needs and what buffers it needs to bind therefore
+ having all the necessary bindings in one place makes it easier to see what the render pass needs
+ and what it needs to bind to the gpu
+*/
+
 use crate::core::camera::Camera;
+use cgmath::prelude::*;
 use crate::core::texture::Texture;
-use crate::core::model::{ Material, Model, Instances, Mesh };
+use crate::core::model::{ Material,  Instances, Mesh };
 
 use std::ops::Range;
 use wgpu::util::DeviceExt;
 
 
-pub const SCREENQUADMODEL: [ModelVertex; 4] = [
-    ModelVertex { position: [-1.0, -1.0, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-    ModelVertex { position: [-1.0,  1.0, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 0.0] },
-    ModelVertex { position: [ 1.0, -1.0, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 0.0] },
-    ModelVertex { position: [ 1.0,  1.0, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+pub const QUADMESH: [Vertex; 4] = [
+    Vertex { position: [-1.0, -1.0, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
+    Vertex { position: [-1.0,  1.0, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 0.0] },
+    Vertex { position: [ 1.0, -1.0, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 0.0] },
+    Vertex { position: [ 1.0,  1.0, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
 ];
-pub const SCREENQUADMODEL_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
-
-
-pub const SCREENQUAD : [VertexUV; 4] = [
-    VertexUV { position: [-1.0, -1.0, 0.0], uv: [0.0, 1.0] },
-    VertexUV { position: [-1.0,  1.0, 0.0], uv: [0.0, 0.0] },
-    VertexUV { position: [ 1.0, -1.0, 0.0], uv: [1.0, 1.0] },
-    VertexUV { position: [ 1.0,  1.0, 0.0], uv: [1.0, 0.0] },
-];
-
-pub const SCREENQUAD_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
+pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
 
 
 
 
-// VERTEX BUFFER LAYOUTS {{{
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraUniform 
+{
+    view: [[f32; 4]; 4],// can't use cgmath with bytemuck directly so we'll have
+    proj: [[f32; 4]; 4],// to convert the Matrix4 into a 4x4 f32 array
+    view_position: [f32; 4],
+}
+impl CameraUniform 
+{
+    pub fn new() -> Self
+    {
+        Self 
+        {
+            view: cgmath::Matrix4::identity().into(),
+            proj: cgmath::Matrix4::identity().into(),
+            view_position: [0.0; 4]
+        }
+    }
+}
+pub fn update_view_proj(camera: &mut Camera, uniform: &mut CameraUniform) 
+{
+    uniform.view_position = camera.position.to_homogeneous().into();
+    uniform.proj = camera.projection.calc_matrix().into();
+    uniform.view = camera.calc_matrix().into();
+}
+
+
+
+
+
+// let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+//     layout,
+//     entries: &[
+//         wgpu::BindGroupEntry {
+//             binding: 0,
+//             resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+//         },
+//         wgpu::BindGroupEntry {
+//             binding: 1,
+//             resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+//         },
+//         wgpu::BindGroupEntry {
+//             binding: 2,
+//             resource: wgpu::BindingResource::Buffer(
+//                 wgpu::BufferBinding {
+//                     buffer: &device.create_buffer_init(
+//                         &wgpu::util::BufferInitDescriptor {
+//                             label: Some("Material Color Buffer"),
+//                             contents: bytemuck::cast_slice(&[diffuse_color]),
+//                             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+//                         }
+//                     ),
+//                     offset: 0,
+//                     size: None,
+//                 }
+//             ),
+//         },
+//     ],
+//     label: None,
+// });
+
+
+
 pub trait VertexBuffer
 {
     fn desc() -> wgpu::VertexBufferLayout<'static>
     {
         use std::mem;
-        wgpu::VertexBufferLayout {
+        wgpu::VertexBufferLayout 
+        {
             array_stride: mem::size_of::<[f32;3]>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
-                wgpu::VertexAttribute {
+                wgpu::VertexAttribute 
+                {
                     offset: 0,
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
+                }
+            ]
         }
     }
-
     fn new_vertex_buffer (device : &wgpu::Device, vertices : &[Self]) -> wgpu::Buffer
     where Self : Sized + bytemuck::Pod
     {
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        })
+        device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor 
+            {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        )
     }
-
     fn new_index_buffer (device : &wgpu::Device, indices : &[u32]) -> wgpu::Buffer
     where Self : Sized + bytemuck::Pod
     {
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(indices),
-            usage: wgpu::BufferUsages::INDEX,
-        })
+        device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor
+            {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        )
     }
 }
+
+// let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+//     label: Some(&format!("{:?} Vertex Buffer", file_name)),
+//     contents: bytemuck::cast_slice(&vertices),
+//     usage: wgpu::BufferUsages::VERTEX,
+// });
+// let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+//     label: Some(&format!("{:?} Index Buffer", file_name)),
+//     contents: bytemuck::cast_slice(&m.mesh.indices),
+//     usage: wgpu::BufferUsages::INDEX,
+// });
+
+
+
+
+// let sampler = device.create_sampler(
+//     &wgpu::SamplerDescriptor {
+//         address_mode_u: wgpu::AddressMode::ClampToEdge,
+//         address_mode_v: wgpu::AddressMode::ClampToEdge,
+//         address_mode_w: wgpu::AddressMode::ClampToEdge,
+//         mag_filter: wgpu::FilterMode::Linear,
+//         min_filter: wgpu::FilterMode::Linear, // 1.
+//         mipmap_filter: wgpu::FilterMode::Nearest,
+//         ..Default::default()
+//     }
+// );
+
+
 
 
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw 
+pub struct InstanceArray
 {
     pub model: [[f32; 4]; 4],
 }
 
-
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ModelVertex 
+pub struct VertexArray
 {
     pub position: [f32; 3],
     pub uv: [f32; 2],
@@ -89,54 +184,13 @@ pub struct ModelVertex
 }
 
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct VertexOnly
-{
-    pub position: [f32; 3],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct VertexUV
-{
-    pub position: [f32; 3],
-    pub uv: [f32; 2],
-}
 
 
-impl VertexBuffer for VertexOnly {}
-
-impl VertexBuffer for VertexUV
-{
-    fn desc() -> wgpu::VertexBufferLayout<'static>
-    {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<VertexUV>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-
-impl VertexBuffer for InstanceRaw {
+impl VertexBuffer for InstanceArray {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<InstanceArray>() as wgpu::BufferAddress,
             // We need to switch from using a step mode of Vertex to Instance
             // This means that our shaders will only change to use the next
             // instance when the shader starts processing a new instance
@@ -472,7 +526,6 @@ impl RenderPipelineWrapper
         );
         Self { pipeline, resources, vertex_buffers }
     }
-
 }
 
 
