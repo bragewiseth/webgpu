@@ -16,13 +16,14 @@ use std::ops::Range;
 use wgpu::util::DeviceExt;
 
 
-pub const QUADMESH: [Vertex; 4] = [
-    Vertex { position: [-1.0, -1.0, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-    Vertex { position: [-1.0,  1.0, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 0.0] },
-    Vertex { position: [ 1.0, -1.0, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 0.0] },
-    Vertex { position: [ 1.0,  1.0, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+pub const QUADMESH: [[f32; 3];4] = [
+    [[-1.0, -1.0, 0.0], [0.0, 1.0], [0.0, 0.0, 0.0]],
+    [[-1.0,  1.0, 0.0], [0.0, 0.0], [0.0, 0.0, 0.0]],
+    [[ 1.0, -1.0, 0.0], [1.0, 1.0], [0.0, 0.0, 0.0]],
+    [[ 1.0,  1.0, 0.0], [1.0, 0.0], [0.0, 0.0, 0.0]],
 ];
 pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
+
 
 
 
@@ -54,8 +55,6 @@ pub fn update_view_proj(camera: &mut Camera, uniform: &mut CameraUniform)
     uniform.proj = camera.projection.calc_matrix().into();
     uniform.view = camera.calc_matrix().into();
 }
-
-
 
 
 
@@ -92,50 +91,116 @@ pub fn update_view_proj(camera: &mut Camera, uniform: &mut CameraUniform)
 
 
 
-pub trait VertexBuffer
+pub trait VertexBufferTrait
 {
-    fn desc() -> wgpu::VertexBufferLayout<'static>
-    {
-        use std::mem;
-        wgpu::VertexBufferLayout 
-        {
-            array_stride: mem::size_of::<[f32;3]>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute 
-                {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                }
-            ]
-        }
-    }
-    fn new_vertex_buffer (device : &wgpu::Device, vertices : &[Self]) -> wgpu::Buffer
-    where Self : Sized + bytemuck::Pod
-    {
-        device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor 
-            {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            }
-        )
-    }
-    fn new_index_buffer (device : &wgpu::Device, indices : &[u32]) -> wgpu::Buffer
-    where Self : Sized + bytemuck::Pod
-    {
-        device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor
-            {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(indices),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        )
-    }
+    fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
+
+#[macro_export]
+macro_rules! define_instance_buffer {
+    ($name:ident, $(($field:ident, $size:expr, $format:expr, $location:expr)),*) => {
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        pub struct $name {
+            $(
+                pub $field: $size,
+            )*
+        }
+
+        impl VertexBufferTrait for $name {
+            fn desc() -> wgpu::VertexBufferLayout<'static> {
+                use std::mem;
+                let mut attributes = Vec::new();
+                let mut offset = 0;
+
+                $(
+                    let field_size = mem::size_of::<$size>() as wgpu::BufferAddress;
+                    for i in 0..$size.len() {
+                        attributes.push(wgpu::VertexAttribute {
+                            offset,
+                            shader_location: $location + i as u32,
+                            format: $format,
+                        });
+                        offset += mem::size_of::<f32>() as wgpu::BufferAddress * $size[i].len();
+                    }
+                )*
+
+                wgpu::VertexBufferLayout {
+                    array_stride: offset,
+                    step_mode: wgpu::VertexStepMode::Instance,
+                    attributes: &attributes,
+                }
+            }
+        }
+    };
+}
+
+
+#[macro_export]
+macro_rules! define_vertex_buffer {
+    ($name:ident, $(($field:ident, $size:expr, $format:expr, $location:expr)),*) => {
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        pub struct $name {
+            $(
+                pub $field: $size,
+            )*
+        }
+
+        impl VertexBufferTrait for $name {
+            fn desc() -> wgpu::VertexBufferLayout<'static> {
+                use std::mem;
+                let mut attributes = Vec::new();
+                let mut offset = 0;
+
+                $(
+                    let field_size = mem::size_of::<$size>() as wgpu::BufferAddress;
+                    attributes.push(wgpu::VertexAttribute {
+                        offset,
+                        shader_location: $location,
+                        format: $format,
+                    });
+                    offset += field_size;
+                )*
+
+                wgpu::VertexBufferLayout {
+                    array_stride: offset,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &attributes,
+                }
+            }
+        }
+    };
+}
+
+
+// step 1 define the buffers
+
+// define_vertex_buffer!(
+//     VertexBuffer0,
+//     (position, wgpu::VertexFormat::Float32x3, 0)
+// );
+//
+// define_vertex_buffer!(
+//     VertexBuffer1,
+//     (position, wgpu::VertexFormat::Float32x3, 0),
+//     (uv, wgpu::VertexFormat::Float32x2, 1)
+// );
+//
+// define_vertex_buffer!(
+//     VertexBuffer2,
+//     (position, wgpu::VertexFormat::Float32x3, 0),
+//     (uv, wgpu::VertexFormat::Float32x2, 1),
+//     (normal, wgpu::VertexFormat::Float32x3, 2)
+// );
+//
+// define_instance_buffer!(
+//     InstanceBuffer,
+//     (model, [[f32; 4]; 4], wgpu::VertexFormat::Float32x4, 5)
+// );
+
+
+// step 2 make the buffers
 
 // let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 //     label: Some(&format!("{:?} Vertex Buffer", file_name)),
@@ -147,6 +212,12 @@ pub trait VertexBuffer
 //     contents: bytemuck::cast_slice(&m.mesh.indices),
 //     usage: wgpu::BufferUsages::INDEX,
 // });
+
+
+/****************************************************************************************
+ * END VERTEX STUFF
+ ****************************************************************************************/
+
 
 
 
@@ -162,98 +233,6 @@ pub trait VertexBuffer
 //         ..Default::default()
 //     }
 // );
-
-
-
-
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceArray
-{
-    pub model: [[f32; 4]; 4],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct VertexArray
-{
-    pub position: [f32; 3],
-    pub uv: [f32; 2],
-    pub normal: [f32; 3],
-}
-
-
-
-
-impl VertexBuffer for InstanceArray {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<InstanceArray>() as wgpu::BufferAddress,
-            // We need to switch from using a step mode of Vertex to Instance
-            // This means that our shaders will only change to use the next
-            // instance when the shader starts processing a new instance
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
-                // for each vec4. We'll have to reassemble the mat4 in the shader.
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
-                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
-                    shader_location: 5,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
-        }
-    }
-}
-
-
-
-impl VertexBuffer for ModelVertex {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
-        }
-    }
-}
-
 
 pub trait Resource
 {

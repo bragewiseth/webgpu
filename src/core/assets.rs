@@ -1,10 +1,13 @@
 use crate::core::model;
-use crate::core::renderer::Vertex;
+use crate::renderer::VertexBufferTrait;
 use crate::core::texture;
 
 
 use std::io::{BufReader, Cursor};
 use cfg_if::cfg_if;
+
+
+
 
 
 
@@ -69,29 +72,40 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
 
 
 
+
 pub async fn load_texture(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) -> anyhow::Result<texture::Texture> 
+) -> anyhow::Result<wgpu::Texture> 
 {
     if file_name.is_empty() {
-        return Ok(texture::Texture::default_white(device,queue));
+        return Ok(texture::default_white(device,queue));
     }
     let data = load_binary(file_name).await?;
-    texture::Texture::from_bytes(device, queue, &data, file_name)
+    texture::from_bytes(device, queue, &data, file_name)
 }
 
 
 
+struct ObjMesh {
+    name: String,
+    meshes: tobj::Model,
+}
+
+
+struct ObjMaterial {
+    name: String,
+    material: tobj::Material,
+}
 
 
 
-pub async fn load_model(
+pub async fn load_model<T: VertexBufferTrait>(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) -> anyhow::Result<(Vec<model::Mesh>, Vec<model::Material>)> 
+) -> anyhow::Result<(Vec<model::Mesh<T>>, Vec<model::Material>)> 
 {
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
@@ -113,79 +127,64 @@ pub async fn load_model(
     ) .await?;
 
 
-    let mut materials = Vec::new();
-    
-    if obj_materials.is_ok() 
+
+    ObjModel 
     {
-        for m in obj_materials? 
-        {
-            let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
-            let texture = diffuse_texture.view().unwrap();
-            let diffuse_color = model::Color { color: [m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0] };
-            materials.push(
-                model::Material 
-                {
-                    name: m.name,
-                    diffuse_texture: texture,
-                    diffuse_color: model::Color {color : [m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0]},
-                }
-            );
-        }
+        name: file_name.to_string(),
+        meshes: models,
+        materials: obj_materials,
     }
-
-    let meshes = models
-        .into_iter()
-        .map(|m| 
-            {
-                let pos = (0..m.mesh.positions.len() / 3)
-                    .map(|i| [
-                            m.mesh.positions[i * 3],
-                            m.mesh.positions[i * 3 + 1],
-                            m.mesh.positions[i * 3 + 2],
-                        ]
-                    );
-
-                let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 {
-                    (0..m.mesh.texcoords.len() / 2)
-                        .map(|i| [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]])
-                        .collect()
-                } else {
-                    (0..m.mesh.positions.len() / 3)
-                        .map(|_| [0.0, 0.0])
-                        .collect()
-                }; 
-
-                let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 {
-                    (0..m.mesh.normals.len() / 3)
-                        .map(|i| [
-                            m.mesh.normals[i * 3],
-                            m.mesh.normals[i * 3 + 1],
-                            m.mesh.normals[i * 3 + 2],
-                        ])
-                        .collect()
-                } else {
-                    (0..m.mesh.positions.len() / 3)
-                        .map(|_| [0.0, 0.0, 0.0])
-                        .collect()
-                };
-
-                let vertices = pos.zip(uv).zip(normals).map(|((pos, uv), normal)| Vertex {
-                    position: pos,
-                    uv,
-                    normal,
-                }).collect::<Vec<_>>();
-
-                let indices = m.mesh.indices.clone();
-
-
-                model::Mesh {
-                    name: file_name.to_string(),
-                    vertices,
-                    indices,
-                    num_elements: m.mesh.indices.len() as u32,
-                }
-        })
-        .collect::<Vec<_>>();
-    Ok((meshes, materials))
 }
 
+
+
+
+
+    // let meshes = models
+    //     .into_iter()
+    //     .map(|m| 
+    //         {
+    //             let pos = (0..m.mesh.positions.len() / 3)
+    //                 .map(|i| [
+    //                         m.mesh.positions[i * 3],
+    //                         m.mesh.positions[i * 3 + 1],
+    //                         m.mesh.positions[i * 3 + 2],
+    //                     ]
+    //                 );
+    //
+    //             let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 {
+    //                 (0..m.mesh.texcoords.len() / 2)
+    //                     .map(|i| [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]])
+    //                     .collect()
+    //             } else {
+    //                 (0..m.mesh.positions.len() / 3)
+    //                     .map(|_| [0.0, 0.0])
+    //                     .collect()
+    //             }; 
+    //
+    //             let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 {
+    //                 (0..m.mesh.normals.len() / 3)
+    //                     .map(|i| [
+    //                         m.mesh.normals[i * 3],
+    //                         m.mesh.normals[i * 3 + 1],
+    //                         m.mesh.normals[i * 3 + 2],
+    //                     ])
+    //                     .collect()
+    //             } else {
+    //                 (0..m.mesh.positions.len() / 3)
+    //                     .map(|_| [0.0, 0.0, 0.0])
+    //                     .collect()
+    //             };
+    //
+    //             let vertices = pos.zip(uv).zip(normals).map(|((pos, uv), normal)| 
+    //             {
+    //                 VertexBuffer2
+    //                 {
+    //                     position: pos,
+    //                     uv,
+    //                     normal,
+    //                 }
+    //
+    //             }).collect::<Vec<_>>();
+    //
+    //             let indices = m.mesh.indices.clone();

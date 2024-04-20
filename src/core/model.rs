@@ -1,14 +1,13 @@
-use crate::renderer::VertexArray;
-use crate::renderer::InstanceArray;
+use crate::renderer::VertexBufferTrait;
 
 
 
 
 
-pub struct Mesh 
+pub struct Mesh<T : VertexBufferTrait>
 {
     pub name: String,
-    pub vertices: Vec<VertexArray>,
+    pub vertices: Vec<T>,
     pub indices: Vec<u32>,
     pub num_elements: u32,
 } 
@@ -19,7 +18,7 @@ pub struct Material
 {
     pub name: String,
     pub diffuse_color: Color,
-    pub diffuse_texture: wgpu::TextureView,
+    pub diffuse_texture: wgpu::Texture,
 }
 
 
@@ -34,26 +33,30 @@ pub struct Color
 
 
 
-pub struct Model 
+pub struct Model<T : VertexBufferTrait> 
 {
-    pub meshes: Vec<Mesh>,
+    pub meshes: Vec<Mesh<T>>,
     pub materials: Vec<u32>,
 }
 
 
-pub struct ModelInstance 
+pub struct Instance 
 {
     pub position: cgmath::Vector3<f32>,
     pub rotation: cgmath::Quaternion<f32>,
     pub scale: cgmath::Vector3<f32>,
 }
 
+pub struct InstanceBuffer
+{
+    pub model: [[f32; 4]; 4],
+}
 
 
-impl ModelInstance {
-    pub fn to_array(&self) -> InstanceArray
+impl Instance {
+    pub fn to_array(&self) -> InstanceBuffer
     {   
-        InstanceArray
+        InstanceBuffer
         {
             model: (
                 cgmath::Matrix4::from_translation(self.position) * 
@@ -67,7 +70,7 @@ impl ModelInstance {
 
 
 
-pub struct ModelInstances
+pub struct Instances
 {
-    pub instances: Vec<ModelInstance>,
+    pub instances: Vec<Instance>,
 } 
