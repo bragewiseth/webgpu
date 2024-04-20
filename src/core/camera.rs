@@ -137,10 +137,10 @@ impl Camera {
 
 
 /**
- * Projection
- * holds the projection matrix
- * offers methods to change the fovy and aspect ratio
- * offers a method to calculate the projection matrix into Matrix4<f32>
+ Projection
+ holds the projection matrix
+ offers methods to change the fovy and aspect ratio
+ offers a method to calculate the projection matrix into Matrix4<f32>
  */
 #[derive(Debug)] 
 pub struct Projection 
@@ -151,15 +151,9 @@ pub struct Projection
     zfar: f32,
 }
 
-/**
-    new
-    resize
-    set_fovy
-    calc_matrix
-    */
+
 impl Projection 
 {
-    /// Create a new projection matrix
     pub fn new<F: Into<Rad<f32>>>(
         width: u32,
         height: u32,

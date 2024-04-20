@@ -1,13 +1,7 @@
-use crate::renderer::VertexBufferTrait;
-
-
-
-
-
-pub struct Mesh<T : VertexBufferTrait>
+pub struct Mesh
 {
     pub name: String,
-    pub vertices: Vec<T>,
+    pub vertices: Vec<f32>,
     pub indices: Vec<u32>,
     pub num_elements: u32,
 } 
@@ -33,11 +27,11 @@ pub struct Color
 
 
 
-pub struct Model<T : VertexBufferTrait> 
-{
-    pub meshes: Vec<Mesh<T>>,
-    pub materials: Vec<u32>,
-}
+// pub struct Model<T : VertexBufferTrait> 
+// {
+//     pub meshes: Vec<Mesh<T>>,
+//     pub materials: Vec<u32>,
+// }
 
 
 pub struct Instance 
@@ -47,25 +41,18 @@ pub struct Instance
     pub scale: cgmath::Vector3<f32>,
 }
 
-pub struct InstanceBuffer
+impl Instance
 {
-    pub model: [[f32; 4]; 4],
-}
-
-
-impl Instance {
-    pub fn to_array(&self) -> InstanceBuffer
-    {   
-        InstanceBuffer
-        {
-            model: (
-                cgmath::Matrix4::from_translation(self.position) * 
-                cgmath::Matrix4::from(self.rotation) * 
-                cgmath::Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z)
-            ).into(),
-        }
+    pub fn to_buffer(&self) -> [[f32; 4]; 4]
+    {
+        (
+            cgmath::Matrix4::from_translation(self.position) * 
+            cgmath::Matrix4::from(self.rotation) * 
+            cgmath::Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z)
+        ).into()
     }
 }
+
 
 
 

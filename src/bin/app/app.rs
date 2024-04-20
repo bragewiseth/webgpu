@@ -321,15 +321,9 @@ impl Engine
                     occlusion_query_set: None,
                 }
             );
-            // render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.cube, &self.world.mats, &self.world.cube_instances, 0..9, &self.camera.bind_group );
-            // render_pass.draw_model_instanced(&self.world.sphere, &self.world.sphere_instances, 0..3);
-            render_pass.set_pipeline_and_bindgroups(&self.pixel_pipeline, &self.world.mats[0],&self.camera.bind_group );
-            render_pass.draw_mesh_instanced( &self.world.sphere.meshes[0], &self.world.sphere_instances, 0..3,  )
-            // render_pass.draw_pipeline_instanced(&self.pixel_pipeline, &self.world.plane, &self.world.plane_instances, 0..1, &self.camera.bind_group );
-            // render_pass.set_pipeline(&self.pixel_pipeline.pipeline);
-            // render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
-            // render_pass.set_bind_group(1, &self.world.mats[0].bind_group, &[]);
-            // render_pass.draw_mesh(&self.screenquad);
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_blend_constant(color);
+            render_pass.set_vertex_buffer(0, self.world.sphere.vertex_buffer.slice(..));
         }
         {
             let mut render_pass = create_render_pass!(encoder, view);

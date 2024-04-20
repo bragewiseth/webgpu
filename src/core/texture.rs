@@ -1,5 +1,6 @@
 use image::GenericImageView;
 use anyhow::*;
+use cfg_if::cfg_if;
 
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float; // 1.
@@ -16,6 +17,7 @@ pub fn from_bytes(
     let img = image::load_from_memory(bytes)?;
     from_image(device, queue, &img, Some(label))
 }
+
 
 
 pub fn from_image(
@@ -155,4 +157,41 @@ pub fn create_blank_texture(
         label: Some(label),
     });
     texture
+}
+
+
+
+
+pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
+    println!("Loading {:?}", file_name);
+    cfg_if! {
+        if #[cfg(target_arch = "wasm32")] {
+            let url = format_url(file_name);
+            let data = reqwest::get(url)
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+        } else {
+            let path = std::path::Path::new(env!("OUT_DIR"))
+                .join("assets")
+                .join(file_name);
+            let data = std::fs::read(path)?;
+        }
+    }
+    Ok(data)
+}
+
+
+pub async fn load_texture(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> anyhow::Result<wgpu::Texture> 
+{
+    if file_name.is_empty() {
+        return Ok(default_white(device,queue));
+    }
+    let data = load_binary(file_name).await?;
+    from_bytes(device, queue, &data, file_name)
 }
