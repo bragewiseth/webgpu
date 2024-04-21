@@ -6,20 +6,15 @@ use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
 
 
-pub struct World
-{       
-    pub mats: Vec<Material>,
-    pub cube: Model,
-    pub cube_instances: Instances,
-    pub floor: Mesh,
-    pub sphere: Model,
-    pub sphere_instances: Instances,
-    pub plane: Model,
-    pub plane_instances: Instances,
-}
 
 
-
+let camera = Camera::new(
+    cgmath::Point3::new(0.0, -10.0, 0.0),
+    cgmath::Deg(0.0),
+    cgmath::Deg(0.0),
+    Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0),
+    CameraController::new(10.0, 0.2),
+);
 
 impl World 
 {
@@ -154,3 +149,54 @@ impl World
 
     }
 }
+
+
+
+// let meshes = models
+//     .into_iter()
+//     .map(|m| 
+//         {
+//             let pos = (0..m.mesh.positions.len() / 3)
+//                 .map(|i| [
+//                         m.mesh.positions[i * 3],
+//                         m.mesh.positions[i * 3 + 1],
+//                         m.mesh.positions[i * 3 + 2],
+//                     ]
+//                 );
+//
+//             let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 {
+//                 (0..m.mesh.texcoords.len() / 2)
+//                     .map(|i| [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]])
+//                     .collect()
+//             } else {
+//                 (0..m.mesh.positions.len() / 3)
+//                     .map(|_| [0.0, 0.0])
+//                     .collect()
+//             }; 
+//
+//             let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 {
+//                 (0..m.mesh.normals.len() / 3)
+//                     .map(|i| [
+//                         m.mesh.normals[i * 3],
+//                         m.mesh.normals[i * 3 + 1],
+//                         m.mesh.normals[i * 3 + 2],
+//                     ])
+//                     .collect()
+//             } else {
+//                 (0..m.mesh.positions.len() / 3)
+//                     .map(|_| [0.0, 0.0, 0.0])
+//                     .collect()
+//             };
+//
+//             let vertices = pos.zip(uv).zip(normals).map(|((pos, uv), normal)| 
+//             {
+//                 VertexBuffer2
+//                 {
+//                     position: pos,
+//                     uv,
+//                     normal,
+//                 }
+//
+//             }).collect::<Vec<_>>();
+//
+//             let indices = m.mesh.indices.clone();

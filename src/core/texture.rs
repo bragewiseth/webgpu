@@ -134,6 +134,7 @@ pub fn default_white(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Textur
             depth_or_array_layers: 1,
         },
     );
+    texture
 }
 
 

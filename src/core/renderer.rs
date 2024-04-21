@@ -6,14 +6,9 @@
  having all the necessary bindings in one place makes it easier to see what the render pass needs
  and what it needs to bind to the gpu
 */
-
-use crate::core::camera::Camera;
+use crate::camera::Camera;
 use cgmath::prelude::*;
-use crate::core::texture::Texture;
-use crate::core::model::{ Material,  Instances, Mesh };
 
-use std::ops::Range;
-use wgpu::util::DeviceExt;
 
 
 pub const QUADVERTS: &[[f32; 3]; 4] = &[ [-1.0, -1.0, 0.0], [-1.0,  1.0, 0.0], [ 1.0, -1.0, 0.0], [ 1.0,  1.0, 0.0], ];
@@ -23,8 +18,31 @@ pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
 
 
 /****************************************************************************************
+ * RENDERER
+ ****************************************************************************************/
+
+
+pub struct Rendercore<'a>
+{
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub surface: wgpu::Surface<'a>,
+    pub config: wgpu::SurfaceConfiguration,
+}
+
+
+pub trait RendererTrait
+{
+    fn render(&self);
+    fn update(&self);
+    fn load_scene(&self);
+}
+
+
+/****************************************************************************************
  * UNIFORMS
  ****************************************************************************************/
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform 
@@ -45,7 +63,7 @@ impl CameraUniform
         }
     }
 }
-pub fn update_view_proj(camera: &mut Camera, uniform: &mut CameraUniform) 
+pub fn update_camera_uniform(camera: &Camera, uniform: &mut CameraUniform) 
 {
     uniform.view_position = camera.position.to_homogeneous().into();
     uniform.proj = camera.projection.calc_matrix().into();
@@ -54,127 +72,23 @@ pub fn update_view_proj(camera: &mut Camera, uniform: &mut CameraUniform)
 
 
 
+
 /****************************************************************************************
  * VERTEX STUFF
  ****************************************************************************************/
-// step 1 define the buffers
-
-// define_vertex_buffer!(
-//     VertexBuffer0,
-//     (position, wgpu::VertexFormat::Float32x3, 0)
-// );
-//
-// define_vertex_buffer!(
-//     VertexBuffer1,
-//     (position, wgpu::VertexFormat::Float32x3, 0),
-//     (uv, wgpu::VertexFormat::Float32x2, 1)
-// );
-//
-// define_vertex_buffer!(
-//     VertexBuffer2,
-//     (position, wgpu::VertexFormat::Float32x3, 0),
-//     (uv, wgpu::VertexFormat::Float32x2, 1),
-//     (normal, wgpu::VertexFormat::Float32x3, 2)
-// );
-//
-// define_instance_buffer!(
-//     InstanceBuffer,
-//     (model, [[f32; 4]; 4], wgpu::VertexFormat::Float32x4, 5)
-// );
 
 
-// step 2 make buffers from obj files or whatever data
-// let vertices = VertexBuffer2 {}
-
-// let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//     label: Some(&format!("{:?} Vertex Buffer", file_name)),
-    // contents: bytemuck::cast_slice(&vertices),
-//     usage: wgpu::BufferUsages::VERTEX,
-// });
-// let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//     label: Some(&format!("{:?} Index Buffer", file_name)),
-//     contents: bytemuck::cast_slice(&m.mesh.indices),
-//     usage: wgpu::BufferUsages::INDEX,
-// });
-
-// let meshes = models
-//     .into_iter()
-//     .map(|m| 
-//         {
-//             let pos = (0..m.mesh.positions.len() / 3)
-//                 .map(|i| [
-//                         m.mesh.positions[i * 3],
-//                         m.mesh.positions[i * 3 + 1],
-//                         m.mesh.positions[i * 3 + 2],
-//                     ]
-//                 );
-//
-//             let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 {
-//                 (0..m.mesh.texcoords.len() / 2)
-//                     .map(|i| [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]])
-//                     .collect()
-//             } else {
-//                 (0..m.mesh.positions.len() / 3)
-//                     .map(|_| [0.0, 0.0])
-//                     .collect()
-//             }; 
-//
-//             let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 {
-//                 (0..m.mesh.normals.len() / 3)
-//                     .map(|i| [
-//                         m.mesh.normals[i * 3],
-//                         m.mesh.normals[i * 3 + 1],
-//                         m.mesh.normals[i * 3 + 2],
-//                     ])
-//                     .collect()
-//             } else {
-//                 (0..m.mesh.positions.len() / 3)
-//                     .map(|_| [0.0, 0.0, 0.0])
-//                     .collect()
-//             };
-//
-//             let vertices = pos.zip(uv).zip(normals).map(|((pos, uv), normal)| 
-//             {
-//                 VertexBuffer2
-//                 {
-//                     position: pos,
-//                     uv,
-//                     normal,
-//                 }
-//
-//             }).collect::<Vec<_>>();
-//
-//             let indices = m.mesh.indices.clone();
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceBuffer
-{
-    pub modelmatrix : [[f32;4];4]
-}
 
 pub trait VertexBufferTrait
 {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
 
-pub fn update_instance_buffer(instance: &Instances, buffer: &mut wgpu::Buffer)
-{
-    let data = instance
-        .instances
-        .iter()
-        .map(|i| i.to_buffer())
-        .collect::<Vec<_>>();
-    let size = (std::mem::size_of::<[[f32; 4]; 4]] * data.len()) as wgpu::BufferAddress;
-    let slice = bytemuck::cast_slice(&data);
-    let mut encoder = instance.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    encoder.copy_buffer_to_buffer(slice, 0, buffer, 0, size);
-    instance.queue.submit(std::iter::once(encoder.finish()));
-}
 
 
 #[macro_export]
-macro_rules! define_instance_buffer {
+macro_rules! define_instance_buffer 
+{
     ($name:ident, $(($field:ident, $size:expr, $format:expr, $location:expr)),*) => {
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -271,7 +185,6 @@ pub trait PushConstantTrait
 }
 
 
-
 #[macro_export]
 macro_rules! define_bind_group {
     ($name:ident, $(($binding:expr, $visibility:expr, $ty:expr, $count:expr)),*) => {
@@ -297,80 +210,11 @@ macro_rules! define_bind_group {
     };
 }
 
-// let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-//     layout,
-//     entries: &[
-//         wgpu::BindGroupEntry {
-//             binding: 0,
-//             resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-//         },
-//         wgpu::BindGroupEntry {
-//             binding: 1,
-//             resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-//         },
-//         wgpu::BindGroupEntry {
-//             binding: 2,
-//             resource: wgpu::BindingResource::Buffer(
-//                 wgpu::BufferBinding {
-//                     buffer: &device.create_buffer_init(
-//                         &wgpu::util::BufferInitDescriptor {
-//                             label: Some("Material Color Buffer"),
-//                             contents: bytemuck::cast_slice(&[diffuse_color]),
-//                             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-//                         }
-//                     ),
-//                     offset: 0,
-//                     size: None,
-//                 }
-//             ),
-//         },
-//     ],
-//     label: None,
-// });
-// pub fn make_bind_group(device : &wgpu::Device, layout : &BindGroupLayouts, texture: &Texture, depth: &Texture ) -> wgpu::BindGroup
-// {
-//     device.create_bind_group(&wgpu::BindGroupDescriptor {
-//     layout: &layout.framebuffer,
-//     entries: &[
-//         wgpu::BindGroupEntry {
-//                     binding: 0,
-//                     resource: wgpu::BindingResource::Sampler(&texture.sampler),
-//                 },
-//         wgpu::BindGroupEntry {
-//                     binding: 1,
-//                     resource: wgpu::BindingResource::TextureView(&texture.view),
-//                 },
-//         wgpu::BindGroupEntry {
-//                     binding: 2,
-//                     resource: wgpu::BindingResource::TextureView(&depth.view),
-//                 },
-//     ],
-//     label: None,
-//     })
-// }
-
-
-
-
-// let sampler = device.create_sampler(
-//     &wgpu::SamplerDescriptor {
-//         address_mode_u: wgpu::AddressMode::ClampToEdge,
-//         address_mode_v: wgpu::AddressMode::ClampToEdge,
-//         address_mode_w: wgpu::AddressMode::ClampToEdge,
-//         mag_filter: wgpu::FilterMode::Linear,
-//         min_filter: wgpu::FilterMode::Linear, // 1.
-//         mipmap_filter: wgpu::FilterMode::Nearest,
-//         ..Default::default()
-//     }
-// );
-
 
 
 /****************************************************************************************
  * PIPELINE and RENDER PASS MACROS
  ****************************************************************************************/
-
-
 
 
 
@@ -396,9 +240,6 @@ macro_rules! create_pipeline {
         })
     };
 }
-
-
-
 
 
 #[macro_export]
@@ -451,29 +292,3 @@ macro_rules! create_render_pass {
         })
     };
 }
-
-
-
-
-
-
-
-
-
-
-
-// #[repr(C)]
-// #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-// #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-// pub enum CompareFunction 
-// {
-//     Undefined = 0,
-//     Never = 1,
-//     Less = 2,
-//     Equal = 3,
-//     LessEqual = 4,
-//     Greater = 5,
-//     NotEqual = 6,
-//     GreaterEqual = 7,
-//     Always = 8,
-// }
