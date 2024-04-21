@@ -1,164 +1,141 @@
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
-use crate::renderer::Rendercore;
-use crate::new_device;
-
-
-
-pub struct GraphicsEngine<'a>
-{ 
-    renderer: Rendercore<'a>,
-    event_loop : winit::event_loop::EventLoop<()>,
-    size: winit::dpi::PhysicalSize<u32>,
-} 
-
-pub struct ComputeEngine
-{ 
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    event_loop : winit::event_loop::EventLoop<()>,
-}
 
 
 
 
 
+// pub fn lock_mouse_tab() -> bool
+// {
+//     if self.mouse_locked == false
+//     {
+//         self.window_state.window.set_cursor_grab(CursorGrabMode::Confined).or_else(|_| 
+//         self.window_state.window.set_cursor_grab(CursorGrabMode::Locked)).unwrap();
+//         self.window_state.window.set_cursor_visible(false);
+//         self.mouse_locked = true; 
+//     }
+//     else
+//     {
+//         self.window_state.window.set_cursor_grab(CursorGrabMode::None).unwrap();
+//         self.window_state.window.set_cursor_visible(true);
+//         self.mouse_locked = false;
+//     }
+//     true
+// }
 
-impl<'a> GraphicsEngine<'a>
-{
-    pub async fn new() -> Self 
-    {   
-        let (event_loop, window) = new_window("kaos");
-        let (device, queue, size, config, surface) = new_device!(window);
-        let renderer = Rendercore
-        {
-            device,
-            queue,
-            surface,
-            config,
-        };
-        Self
-        {
-            renderer,
-            event_loop,
-            size,
-        }
-    }
-}
-
-
-
-
-
-
+// match event
+// {
+//     DeviceEvent::MouseMotion{ delta, } if self.mouse_locked == true => 
+//     {
+//         self.camera.controller.process_mouse(delta.0, delta.1);
+//         true
+//     }
+//     _ => false,
+// }
 
 
 #[macro_export]
 macro_rules! event_loop
 {
-    ($event_loop:expr, $engine:expr) => 
+    () => 
     {
-        $event_loop.run(
+        event_loop.run(
             move |event, _, control_flow| 
             match event 
             {
-                Event::WindowEvent 
+                /****************************************************************
+                 * Window Events
+                 ***************************************************************/
+                Event::WindowEvent { ref event, window_id, } 
+                if window_id == self.window.id() =>
                 {
-                    ref event,
-                    window_id,
-                } 
-                if window_id == $engine.window.id() && !$engine.window_input(event) =>
-                {
-                    exit_event!(event, control_flow, $engine);
-                } 
-                Event::DeviceEvent { ref event, .. } => 
-                {
-                    $engine.device_input(event);
+                    match event 
+                    {
+                        WindowEvent::CloseRequested | WindowEvent::KeyboardInput 
+                        {
+                            input : KeyboardInput 
+                            {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            },
+                            ..
+                        } => *control_flow = ControlFlow::Exit, 
+                        WindowEvent::Resized(physical_size) =>  self.resize(*physical_size),
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } =>  self.resize(**new_inner_size),
+                        WindowEvent::KeyboardInput 
+                        {
+                            input: KeyboardInput 
+                            {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Tab),
+                                ..
+                            },
+                            ..
+                        } => lock_mouse_tab(),
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    virtual_keycode: Some(key),
+                                    state,
+                                    ..
+                                },
+                            ..
+                        } => self.camera.controller.process_keyboard(*key, *state),
+                        WindowEvent::MouseWheel { delta, .. } => self.camera.controller.process_scroll(delta);
+                        _ => {}
+                    }
                 }
-                Event::RedrawRequested(window_id) if window_id == $engine.window.id() => 
+                /****************************************************************
+                 * Device Events
+                 ***************************************************************/ 
+                Event::DeviceEvent { ref event, .. } => self.device_input(event),
+                /****************************************************************
+                 * Redraw Requested
+                 ***************************************************************/
+                Event::RedrawRequested(window_id) if window_id == self.window.id() => 
                 {
                     let now = instant::Instant::now();
                     let dt = now - last_render_time;
                     last_render_time = now;
-                    $engine.update(dt, last_render_time);
-                    match $engine.render()
+                    self.update(dt, last_render_time);
+                    match self.render()
                     {
                         Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost) => $engine.resize($engine.window_state.size),
+                        Err(wgpu::SurfaceError::Lost) => self.resize(self.window_state.size),
                         Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
                         Err(e) => eprintln!("{:?}", e),
                     }
                 }
-                Event::MainEventsCleared => 
-                {
-                    $engine.window.request_redraw();
-                }
+                /****************************************************************
+                 * Main Events Cleared
+                 ***************************************************************/
+                Event::MainEventsCleared => self.window.request_redraw(),
+                /****************************************************************
+                 * Default
+                 ***************************************************************/
                 _ => {}
             }
         );
     };
 }
-        
+
+
 
 
 #[macro_export]
 macro_rules! rezize
 {
-    ($engine:expr, $new_size:expr) => 
+    ($new_size:expr) => 
     {
         if $new_size.width > 0 && $new_size.height > 0 
         {
-            $engine.size = $new_size;
-            $engine.config.width = $new_size.width;
-            $engine.config.height = $new_size.height;
-            $engine.renderer.surface.configure(&$engine.device, &$engine.config);
-            $engine.camera.projection.resize($new_size.width, $new_size.height);
-        }
-    };
-}
-
-
-
-#[macro_export]
-macro_rules! exit_event
-{
-    ($event:expr, $control_flow:expr) => 
-    {
-        match $event 
-        {
-            WindowEvent::CloseRequested | 
-            WindowEvent::KeyboardInput 
-            {
-                input : KeyboardInput 
-                {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                },
-                ..
-            } => *control_flow = ControlFlow::Exit, 
-            _ => {}
-        }
-    };
-    ($event:expr, $control_flow:expr, $engine:expr) => 
-    {
-        match $event 
-        {
-            WindowEvent::CloseRequested | 
-            WindowEvent::KeyboardInput 
-            {
-                input : KeyboardInput 
-                {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                },
-                ..
-            } => *control_flow = ControlFlow::Exit, 
-            WindowEvent::Resized(physical_size) =>  $engine.resize(*physical_size),
-            WindowEvent::ScaleFactorChanged { new_inner_size, .. } =>  $engine.resize(**new_inner_size),
-            _ => {}
+            self.size = $new_size;
+            renderer.config.width = $new_size.width;
+            renderer.config.height = $new_size.height;
+            renderer.renderer.surface.configure(&renderer.device, &renderer.config);
+            renderer.camera.projection.resize($new_size.width, $new_size.height);
         }
     };
 }

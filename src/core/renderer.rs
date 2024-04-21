@@ -22,13 +22,13 @@ pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
  ****************************************************************************************/
 
 
-pub struct Rendercore<'a>
-{
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub surface: wgpu::Surface<'a>,
-    pub config: wgpu::SurfaceConfiguration,
-}
+// pub struct Rendercore<'a>
+// {
+//     pub device: wgpu::Device,
+//     pub queue: wgpu::Queue,
+//     pub surface: wgpu::Surface<'a>,
+//     pub config: wgpu::SurfaceConfiguration,
+// }
 
 
 pub trait RendererTrait
@@ -165,6 +165,30 @@ macro_rules! define_vertex_buffer {
 }
 
 
+#[macro_export]
+macro_rules! create_vertex_buffer {
+    ($device:expr, $vertices:expr) => {
+        $device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice($vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
+    };
+}
+
+
+#[macro_export]
+macro_rules! create_index_buffer {
+    ($device:expr, $indices:expr) => {
+        $device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice($indices),
+            usage: wgpu::BufferUsages::INDEX,
+        })
+    };
+}
+
+
 
 
 
@@ -211,10 +235,60 @@ macro_rules! define_bind_group {
 }
 
 
+#[macro_export]
+macro_rules! create_bind_group {
+    ($device:expr, $layout:expr, $entries:expr) => {
+        $device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &$layout,
+            entries: $entries,
+            label: None,
+        })
+    };
+}
+
+
 
 /****************************************************************************************
  * PIPELINE and RENDER PASS MACROS
  ****************************************************************************************/
+
+
+
+#[macro_export]
+macro_rules! create_pipline_layout {
+    ($device:expr, $bind_groups:expr, $push_constants:expr) => {
+        $device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Render Pipeline Layout"),
+            bind_group_layouts: $bind_groups,
+            push_constant_ranges: $push_constants,
+        })
+    };
+}
+
+
+
+#[macro_export]
+macro_rules! create_pipeline_descriptor {
+    ($layout:expr, $vs:expr, $fs:expr, $primitive:expr, $color_states:expr, $depth_stencil_state:expr, $multisample_state:expr) => {
+        wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&$layout),
+            vertex: wgpu::VertexState {
+                module: &$vs,
+                entry_point: "main",
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &$fs,
+                entry_point: "main",
+                targets: $color_states,
+            }),
+            primitive: $primitive,
+            depth_stencil: Some($depth_stencil_state),
+            multisample: $multisample_state,
+        }
+    };
+}
 
 
 
