@@ -9,34 +9,12 @@
 use crate::camera::Camera;
 use cgmath::prelude::*;
 
-
-
 pub const QUADVERTS: &[[f32; 3]; 4] = &[ [-1.0, -1.0, 0.0], [-1.0,  1.0, 0.0], [ 1.0, -1.0, 0.0], [ 1.0,  1.0, 0.0], ];
 pub const QUADUV: &[[f32; 2]; 4] = &[[0.0, 1.0], [0.0, 0.0], [1.0, 1.0], [1.0, 0.0]];
 pub const QUADNORMALS: &[[f32; 3]; 4] = &[[0.0, 0.0, 0.0]; 4];
 pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
 
 
-/****************************************************************************************
- * RENDERER
- ****************************************************************************************/
-
-
-// pub struct Rendercore<'a>
-// {
-//     pub device: wgpu::Device,
-//     pub queue: wgpu::Queue,
-//     pub surface: wgpu::Surface<'a>,
-//     pub config: wgpu::SurfaceConfiguration,
-// }
-
-
-pub trait RendererTrait
-{
-    fn render(&self);
-    fn update(&self);
-    fn load_scene(&self);
-}
 
 
 /****************************************************************************************
@@ -69,8 +47,6 @@ pub fn update_camera_uniform(camera: &Camera, uniform: &mut CameraUniform)
     uniform.proj = camera.projection.calc_matrix().into();
     uniform.view = camera.calc_matrix().into();
 }
-
-
 
 
 /****************************************************************************************

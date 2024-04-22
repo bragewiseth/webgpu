@@ -1,4 +1,3 @@
-
 struct Renderer
 {
     device: wgpu::Device,
@@ -34,7 +33,7 @@ struct Shaders
 struct Buffers
 {
     buffer: wgpu::Buffer,
-    size: wgpu::BufferAddress,
+    index_buffer: wgpu::Buffer,
 }
 
 
@@ -45,16 +44,15 @@ struct BufferDescriptors
 
 
 
-
 impl Renderer
 {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, size: winit::dpi::PhysicalSize<u32>, surface: wgpu::Surface) -> Self
     {
-        // define what buffers we need
+        
         define_vertex_buffer!(
             VertexBuffer0,
-            (position, wgpu::VertexFormat::Float32x3, 0)
-        );        
+            (position, wgpu::VertexFormat::Float32x3, 0),
+        );
 
         define_vertex_buffer!(
             VertexBuffer1,
@@ -76,10 +74,9 @@ impl Renderer
 
 
 
+
         Self { device, queue, surface, config}
     }
-
-
 
 
 
@@ -113,59 +110,67 @@ impl Renderer
 
         Ok(())
     }
+
+
+
     fn load_assets()
-    {}
+    {
+        let meshes = models.into_iter()
+            .map(|m| 
+            {
+                let pos = (0..m.mesh.positions.len() / 3)
+                    .map(|i|
+                         [m.mesh.positions[i * 3],
+                          m.mesh.positions[i * 3 + 1],
+                          m.mesh.positions[i * 3 + 2]]
+                    );
+
+                let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 
+                {
+                    (0..m.mesh.texcoords.len() / 2)
+                        .map(|i| [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]])
+                        .collect()
+                } 
+                else 
+                {
+                    (0..m.mesh.positions.len() / 3)
+                        .map(|_| [0.0, 0.0])
+                        .collect()
+                }; 
+
+                let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 
+                {
+                    (0..m.mesh.normals.len() / 3)
+                        .map(|i| 
+                            [m.mesh.normals[i * 3],
+                            m.mesh.normals[i * 3 + 1],
+                            m.mesh.normals[i * 3 + 2]]
+                        ).collect()
+                } 
+                else 
+                {
+                    (0..m.mesh.positions.len() / 3)
+                        .map(|_| [0.0, 0.0, 0.0])
+                        .collect()
+                };
+
+                let vertices = pos.zip(uv).zip(normals)
+                    .map(|((pos, uv), normal)| 
+                    {
+                        VertexBuffer2
+                        {
+                            position: pos,
+                            uv,
+                            normal,
+                        }
+
+                    }).collect::<Vec<_>>();
+
+                let indices = m.mesh.indices.clone();
+            }
+        }
 }
 
 
 
 
-
-// let meshes = models
-//     .into_iter()
-//     .map(|m| 
-//         {
-//             let pos = (0..m.mesh.positions.len() / 3)
-//                 .map(|i| [
-//                         m.mesh.positions[i * 3],
-//                         m.mesh.positions[i * 3 + 1],
-//                         m.mesh.positions[i * 3 + 2],
-//                     ]
-//                 );
-//
-//             let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 {
-//                 (0..m.mesh.texcoords.len() / 2)
-//                     .map(|i| [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]])
-//                     .collect()
-//             } else {
-//                 (0..m.mesh.positions.len() / 3)
-//                     .map(|_| [0.0, 0.0])
-//                     .collect()
-//             }; 
-//
-//             let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 {
-//                 (0..m.mesh.normals.len() / 3)
-//                     .map(|i| [
-//                         m.mesh.normals[i * 3],
-//                         m.mesh.normals[i * 3 + 1],
-//                         m.mesh.normals[i * 3 + 2],
-//                     ])
-//                     .collect()
-//             } else {
-//                 (0..m.mesh.positions.len() / 3)
-//                     .map(|_| [0.0, 0.0, 0.0])
-//                     .collect()
-//             };
-//
-//             let vertices = pos.zip(uv).zip(normals).map(|((pos, uv), normal)| 
-//             {
-//                 VertexBuffer2
-//                 {
-//                     position: pos,
-//                     uv,
-//                     normal,
-//                 }
-//
-//             }).collect::<Vec<_>>();
-//
-//             let indices = m.mesh.indices.clone();

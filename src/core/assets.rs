@@ -39,22 +39,7 @@ pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
 
 
 
-
-
-struct ObjMesh {
-    name: String,
-    mesh: tobj::Model,
-}
-
-
-struct ObjMaterial {
-    name: String,
-    material: tobj::Material,
-}
-
-
-
-pub async fn load_model( file_name: &str,) -> anyhow::Result<(Vec<ObjMesh>, Vec<ObjMaterial>)> 
+pub async fn load_model( file_name: &str,) -> anyhow::Result<(Vec<tobj::Model>, Vec<tobj::Material>)> 
 {
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
@@ -76,29 +61,18 @@ pub async fn load_model( file_name: &str,) -> anyhow::Result<(Vec<ObjMesh>, Vec<
     ) .await?;
 
     let mut materials = Vec::new();
-    
-    if obj_materials.is_ok() {
-        for m in obj_materials? {
-        materials.push(
-        ObjMaterial
-        {
-            name: m.name.clone(),
-            material: m,
-        });
-    }}
-
-    if models.is_empty() {
-        return Err(anyhow::anyhow!("No models found"));
+    let mut meshes = Vec::new();
+    if obj_materials.is_ok() 
+    {
+        for m in obj_materials? { materials.push(m); }
     }
-    else {
-        let mut meshes = Vec::new();
-        for m in models {
-            let mesh = ObjMesh {
-                name: m.name.clone(),
-                mesh: m,
-            };
-            meshes.push(mesh);
-        }
+    if models.is_empty()
+    {   
+        Err(anyhow::anyhow!("No models found"))
+    }
+    else 
+    {
+        for m in models { meshes.push(m); }
         Ok((meshes, materials))
     }
 }

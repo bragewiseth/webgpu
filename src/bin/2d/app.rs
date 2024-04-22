@@ -52,7 +52,6 @@ pub struct Engine
 
 impl Engine
 {
-    // new {{{
     pub async fn new(window_state:WindowState, device:wgpu::Device, queue:wgpu::Queue) -> Self 
     { 
         let config = &window_state.config; 
@@ -193,7 +192,7 @@ impl Engine
                 if self.mouse_locked == false
                 {
                     self.window_state.window.set_cursor_grab(CursorGrabMode::Confined).or_else(|_| 
-                        self.window_state.window.set_cursor_grab(CursorGrabMode::Locked)).unwrap();
+                    self.window_state.window.set_cursor_grab(CursorGrabMode::Locked)).unwrap();
                     self.window_state.window.set_cursor_visible(false);
                     self.mouse_locked = true; 
                 }

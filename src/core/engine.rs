@@ -5,39 +5,42 @@ use wasm_bindgen::prelude::*;
 
 
 
-// pub fn lock_mouse_tab() -> bool
-// {
-//     if self.mouse_locked == false
-//     {
-//         self.window_state.window.set_cursor_grab(CursorGrabMode::Confined).or_else(|_| 
-//         self.window_state.window.set_cursor_grab(CursorGrabMode::Locked)).unwrap();
-//         self.window_state.window.set_cursor_visible(false);
-//         self.mouse_locked = true; 
-//     }
-//     else
-//     {
-//         self.window_state.window.set_cursor_grab(CursorGrabMode::None).unwrap();
-//         self.window_state.window.set_cursor_visible(true);
-//         self.mouse_locked = false;
-//     }
-//     true
-// }
+pub fn toggle_cursor(window : &winit::window::Window) -> bool
+{
+    static mut MOUSE_LOCKED: bool = false;
+    unsafe 
+    { 
+        if MOUSE_LOCKED == false 
+        {
+            window.set_cursor_grab(winit::window::CursorGrabMode::Confined).or_else(|_| 
+            window.set_cursor_grab(winit::window::CursorGrabMode::Locked)).unwrap();
+            window.set_cursor_visible(false);
+            MOUSE_LOCKED = true; 
+        }
+        else
+        {
+            window.set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
+            window.set_cursor_visible(true);
+            MOUSE_LOCKED = false;
+        }
+    }
+    true
+}
 
-// match event
-// {
-//     DeviceEvent::MouseMotion{ delta, } if self.mouse_locked == true => 
-//     {
-//         self.camera.controller.process_mouse(delta.0, delta.1);
-//         true
-//     }
-//     _ => false,
-// }
+
 
 
 #[macro_export]
 macro_rules! event_loop
 {
-    () => 
+    (
+        window                  => $window:expr,
+        windowsize              => $size:expr,
+        key_input_handle        => $key_input:expr,
+        device_input_handle     => $device_input:expr,
+        mousewheel_input_handle => $mousewheel_input:expr,
+        update_handle           => $update:expr
+    ) =>
     {
         event_loop.run(
             move |event, _, control_flow| 
@@ -47,7 +50,7 @@ macro_rules! event_loop
                  * Window Events
                  ***************************************************************/
                 Event::WindowEvent { ref event, window_id, } 
-                if window_id == self.window.id() =>
+                if window_id == $window.id() =>
                 {
                     match event 
                     {
@@ -61,8 +64,8 @@ macro_rules! event_loop
                             },
                             ..
                         } => *control_flow = ControlFlow::Exit, 
-                        WindowEvent::Resized(physical_size) =>  self.resize(*physical_size),
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } =>  self.resize(**new_inner_size),
+                        WindowEvent::Resized(physical_size) =>  $window.resize(*physical_size),
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } =>  $window.resize(**new_inner_size),
                         WindowEvent::KeyboardInput 
                         {
                             input: KeyboardInput 
@@ -72,7 +75,7 @@ macro_rules! event_loop
                                 ..
                             },
                             ..
-                        } => lock_mouse_tab(),
+                        } => toggle_cursor(&$window),
                         WindowEvent::KeyboardInput {
                             input:
                                 KeyboardInput {
@@ -81,28 +84,28 @@ macro_rules! event_loop
                                     ..
                                 },
                             ..
-                        } => self.camera.controller.process_keyboard(*key, *state),
-                        WindowEvent::MouseWheel { delta, .. } => self.camera.controller.process_scroll(delta);
+                        } => $key_input(key, state),
+                        WindowEvent::MouseWheel { delta, .. } => $mousewheel_input(delta);
                         _ => {}
                     }
                 }
                 /****************************************************************
                  * Device Events
                  ***************************************************************/ 
-                Event::DeviceEvent { ref event, .. } => self.device_input(event),
+                Event::DeviceEvent { ref event, .. } => $device_input(event),
                 /****************************************************************
                  * Redraw Requested
                  ***************************************************************/
-                Event::RedrawRequested(window_id) if window_id == self.window.id() => 
+                Event::RedrawRequested(window_id) if window_id == $window.id() => 
                 {
                     let now = instant::Instant::now();
                     let dt = now - last_render_time;
                     last_render_time = now;
-                    self.update(dt, last_render_time);
-                    match self.render()
+                    $update(dt);
+                    match render()
                     {
                         Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost) => self.resize(self.window_state.size),
+                        Err(wgpu::SurfaceError::Lost) => $window.resize($size),
                         Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
                         Err(e) => eprintln!("{:?}", e),
@@ -111,13 +114,24 @@ macro_rules! event_loop
                 /****************************************************************
                  * Main Events Cleared
                  ***************************************************************/
-                Event::MainEventsCleared => self.window.request_redraw(),
+                Event::MainEventsCleared => $window.request_redraw(),
                 /****************************************************************
                  * Default
                  ***************************************************************/
                 _ => {}
             }
         );
+    };
+    (
+        $key:ident => $value:expr,
+        $($rest:tt)*
+    ) => 
+    {
+        event_loop! 
+        {
+            $($rest)*
+            $key => $value,
+        }
     };
 }
 

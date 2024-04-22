@@ -1,3 +1,4 @@
+extern crate kaos;
 mod scene;
 mod renderer;
 
@@ -20,9 +21,17 @@ fn main()
 async fn run()
 {
     let (event_loop, window) = kaos::window::new("floating"); // name it floating since i3wm makes windows with that title float
-    let (device, queue, size, surface) = kaos::new_device!(window);
+    let (device, queue, windowsize, surface) = kaos::new_device!(window);
     let scene = scene::Scene::new(device, queue, size).await;
-    let gpu = renderer::Renderer::new(device, queue, size, surface, &scene).await;
-    gpu.load_assets().await; // creates buffers, bind groups, etc. from the scene
-    engine::event_loop!() // this expands to the event loop code found in core::engine
+    let gpu = renderer::Renderer::new(device, queue, windowsize, surface).await;
+    gpu.load_assets(scene.resources).await;
+
+    engine::event_loop!(
+        window                  => window,
+        windowsize              => windowsize,
+        key_input_handle        => scene.key_input,
+        device_input_handle     => scene.device_input,
+        mousewheel_input_handle => scene.mousewheel_input,
+        update_handle           => renderer.update,
+    )
 }
