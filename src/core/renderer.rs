@@ -17,36 +17,7 @@ pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
 
 
 
-/****************************************************************************************
- * UNIFORMS
- ****************************************************************************************/
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct CameraUniform 
-{
-    view: [[f32; 4]; 4],
-    proj: [[f32; 4]; 4],
-    view_position: [f32; 4],
-}
-impl CameraUniform 
-{
-    pub fn new() -> Self
-    {
-        Self 
-        {
-            view: cgmath::Matrix4::identity().into(),
-            proj: cgmath::Matrix4::identity().into(),
-            view_position: [0.0; 4]
-        }
-    }
-}
-pub fn update_camera_uniform(camera: &Camera, uniform: &mut CameraUniform) 
-{
-    uniform.view_position = camera.position.to_homogeneous().into();
-    uniform.proj = camera.projection.calc_matrix().into();
-    uniform.view = camera.calc_matrix().into();
-}
 
 
 /****************************************************************************************
@@ -108,7 +79,8 @@ macro_rules! define_vertex_buffer {
     ($name:ident, $(($field:ident, $size:expr, $format:expr, $location:expr)),*) => {
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-        pub struct $name {
+        pub struct $name 
+        {
             $(
                 pub $field: $size,
             )*
@@ -188,7 +160,14 @@ pub trait PushConstantTrait
 #[macro_export]
 macro_rules! define_bind_group {
     ($name:ident, $(($binding:expr, $visibility:expr, $ty:expr, $count:expr)),*) => {
-        pub struct $name;
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        pub struct $name 
+        {
+            $(
+                pub $field: $size,
+            )*
+        }
 
         impl BindGroupTrait for $name {
             fn desc(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -222,8 +201,57 @@ macro_rules! create_bind_group {
     };
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraUniform 
+{
+    view: [[f32; 4]; 4],
+    proj: [[f32; 4]; 4],
+    view_position: [f32; 4],
+}
+impl CameraUniform 
+{
+    pub fn new() -> Self
+    {
+        Self 
+        {
+            view: cgmath::Matrix4::identity().into(),
+            proj: cgmath::Matrix4::identity().into(),
+            view_position: [0.0; 4]
+        }
+    }
+}
 
+pub fn update_camera_uniform(camera: &Camera, uniform: &mut CameraUniform) 
+{
+    uniform.view_position = camera.position.to_homogeneous().into();
+    uniform.proj = camera.projection.calc_matrix().into();
+    uniform.view = camera.calc_matrix().into();
+}
 
+impl BindGroupTrait for CameraUniform
+{
+    fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
+    {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry 
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX ,
+                    ty: wgpu::BindingType::Buffer 
+                    {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("camera_bind_group_layout"),
+        })
+    }
+}
 /****************************************************************************************
  * PIPELINE and RENDER PASS MACROS
  ****************************************************************************************/
@@ -342,3 +370,90 @@ macro_rules! create_render_pass {
         })
     };
 }
+
+
+
+
+
+
+
+
+// impl Resource for Material
+// {
+//     fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
+//     {
+//         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+//             entries: &[
+//                 wgpu::BindGroupLayoutEntry {
+//                     binding: 0,
+//                     visibility: wgpu::ShaderStages::FRAGMENT,
+//                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+//                     count: None,
+//                 },
+//                 wgpu::BindGroupLayoutEntry {
+//                     binding: 1,
+//                     visibility: wgpu::ShaderStages::FRAGMENT,
+//                     ty: wgpu::BindingType::Texture {
+//                         multisampled: false,
+//                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
+//                         view_dimension: wgpu::TextureViewDimension::D2,
+//                     },
+//                     count: None,
+//                 },
+//                 wgpu::BindGroupLayoutEntry 
+//                 {
+//                     binding: 2,
+//                     visibility: wgpu::ShaderStages::FRAGMENT,
+//                     ty: wgpu::BindingType::Buffer 
+//                     {
+//                         ty: wgpu::BufferBindingType::Uniform,
+//                         has_dynamic_offset: false,
+//                         min_binding_size: None,
+//                     },
+//                     count: None,
+//                 },
+//             ],
+//             label: Some("material_bind_group_layout"),
+//         })
+//     }
+// }
+
+
+
+// impl Resource for Framebuffer
+// {
+//     fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
+//     {
+//         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+//             entries: &[
+//                 wgpu::BindGroupLayoutEntry {
+//                     binding: 0,
+//                     visibility: wgpu::ShaderStages::FRAGMENT,
+//                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+//                     count: None,
+//                 },
+//                 wgpu::BindGroupLayoutEntry {
+//                     binding: 1,
+//                     visibility: wgpu::ShaderStages::FRAGMENT,
+//                     ty: wgpu::BindingType::Texture {
+//                         multisampled: false,
+//                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
+//                         view_dimension: wgpu::TextureViewDimension::D2,
+//                     },
+//                     count: None,
+//                 },
+//                 wgpu::BindGroupLayoutEntry {
+//                     binding: 2,
+//                     visibility: wgpu::ShaderStages::FRAGMENT,
+//                     ty: wgpu::BindingType::Texture {
+//                         multisampled: false,
+//                         sample_type: wgpu::TextureSampleType::Depth,
+//                         view_dimension: wgpu::TextureViewDimension::D2,
+//                     },
+//                     count: None,
+//                 },
+//             ],
+//             label: Some("framebuffer_bind_group_layout"),
+//         })
+//     }
+// }
