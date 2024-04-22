@@ -36,9 +36,6 @@ macro_rules! event_loop
     (
         window                  => $window:expr,
         windowsize              => $size:expr,
-        key_input_handle        => $key_input:expr,
-        device_input_handle     => $device_input:expr,
-        mousewheel_input_handle => $mousewheel_input:expr,
         update_handle           => $update:expr,
         scene                   => $scene:expr
     ) =>
@@ -85,15 +82,15 @@ macro_rules! event_loop
                                     ..
                                 },
                             ..
-                        } => $key_input(key, state),
-                        WindowEvent::MouseWheel { delta, .. } => $mousewheel_input(delta);
+                        } => $scene.key_input(key, state),
+                        WindowEvent::MouseWheel { delta, .. } => $scene.mousewheel_input(delta);
                         _ => {}
                     }
                 }
                 /****************************************************************
                  * Device Events
                  ***************************************************************/ 
-                Event::DeviceEvent { ref event, .. } => $device_input(event),
+                Event::DeviceEvent { ref event, .. } => $scene.device_input(event),
                 /****************************************************************
                  * Redraw Requested
                  ***************************************************************/
@@ -266,7 +263,7 @@ pub fn new_window(title: &str) -> (winit::event_loop::EventLoop<()>, winit::wind
         else { env_logger::init(); }
     }
 
-    let mut event_loop = winit::event_loop::EventLoop::new().unwrap();
+    let event_loop = winit::event_loop::EventLoop::new().unwrap();
     let window = winit::window::WindowBuilder::new()
         .with_title(title)
         .build(&event_loop)

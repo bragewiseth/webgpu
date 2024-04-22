@@ -1,6 +1,7 @@
 use cgmath::*;
 use winit::event::*;
 use winit::dpi::PhysicalPosition;
+use winit::keyboard::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 
@@ -17,9 +18,6 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 
-
-
-
 #[derive(Debug)]
 pub struct Camera 
 {
@@ -28,6 +26,27 @@ pub struct Camera
     pub velocity: Vector3<f32>,
     pub controller: CameraController,
     pub projection: Projection,
+}
+
+#[derive(Debug)]
+pub struct CameraController 
+{
+    force: Vector3<f32>,
+    mouse_dx: f32,
+    mouse_dy: f32,
+    mouse_pos: PhysicalPosition<f64>,
+    scroll: f32,
+    speed: f32,
+    sensitivity: f32,
+}
+
+#[derive(Debug)] 
+pub struct Projection 
+{
+    aspect: f32,
+    fovy: Rad<f32>,
+    znear: f32,
+    zfar: f32,
 }
 
 
@@ -41,20 +60,15 @@ impl Camera {
     ) -> Self
     {
         let rotation = Quaternion::from(Euler::new(pitch.into() - Rad(FRAC_PI_2), yaw.into(), Rad(0.0)));
-
-        let mut cam = Self 
+        Self 
         {
             position: position.into(),
             rotation,
             velocity: Vector3::zero(),
             controller,
             projection,
-        };
-        cam
+        }
     }
-
-
-
 
 
     pub fn update_fps(&mut self, dt: Duration) 
@@ -115,13 +129,8 @@ impl Camera {
 
     }
 
-    pub fn update_2d(&mut self, dt: Duration) 
-    {
 
-    }
-
-
-    pub fn calc_matrix(&self) -> Matrix4<f32> 
+    pub fn calc_matrix(&self) -> [[f32; 4]; 4]
     {        
         // world is z-up, camera is y-up z-forward
         Matrix4::look_to_rh
@@ -129,27 +138,14 @@ impl Camera {
             self.position,
             -self.rotation * Vector3::unit_z(),
             Vector3::unit_z(),
-        )
+        ).into()
     }
 
 }
 
 
 
-/**
- Projection
- holds the projection matrix
- offers methods to change the fovy and aspect ratio
- offers a method to calculate the projection matrix into Matrix4<f32>
- */
-#[derive(Debug)] 
-pub struct Projection 
-{
-    aspect: f32,
-    fovy: Rad<f32>,
-    znear: f32,
-    zfar: f32,
-}
+
 
 
 impl Projection 
@@ -203,17 +199,7 @@ impl Projection
 
 
 
-#[derive(Debug)]
-pub struct CameraController 
-{
-    force: Vector3<f32>,
-    mouse_dx: f32,
-    mouse_dy: f32,
-    mouse_pos: PhysicalPosition<f64>,
-    scroll: f32,
-    speed: f32,
-    sensitivity: f32,
-}
+
  
 impl CameraController 
 {
@@ -230,39 +216,38 @@ impl CameraController
         }
     }
 
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool{
+    pub fn process_keyboard(&mut self, key: KeyEvent, state: ElementState)
+    {
         let amount = match state 
         {
             ElementState::Pressed => 1.0,
             ElementState::Released => 0.0,
         };
-        match key {
-            VirtualKeyCode::W | VirtualKeyCode::Up => {
-                self.force.z = amount;
-                true
+        if let PhysicalKey::Code(keycode) = key.physical_key 
+        {
+            match keycode {
+                KeyCode::KeyW | KeyCode::ArrowUp => {
+                    self.force.z = amount;
+                }
+                KeyCode::KeyS | KeyCode::ArrowDown => {
+                    self.force.z = -amount;
+                }
+                KeyCode::KeyA | KeyCode::ArrowLeft => {
+                    self.force.x = -amount;
+                }
+                KeyCode::KeyD | KeyCode::ArrowRight => {
+                    self.force.x = amount;
+                }
+                KeyCode::Space => {
+                    self.force.y = amount;
+                }
+                KeyCode::ShiftLeft => {
+                    self.force.y = -amount;
+                }
+                _ => {}
             }
-            VirtualKeyCode::S | VirtualKeyCode::Down => {
-                self.force.z = -amount;
-                true
-            }
-            VirtualKeyCode::A | VirtualKeyCode::Left => {
-                self.force.x = -amount;
-                true
-            }
-            VirtualKeyCode::D | VirtualKeyCode::Right => {
-                self.force.x = amount;
-                true
-            }
-            VirtualKeyCode::Space => {
-                self.force.y = amount;
-                true
-            }
-            VirtualKeyCode::LShift => {
-                self.force.y = -amount;
-                true
-            }
-            _ => false,
-        }
+        } 
+        else { }
     }
 
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {

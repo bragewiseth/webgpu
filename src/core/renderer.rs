@@ -1,4 +1,4 @@
-use crate::camera::Camera;
+use crate::scene::camera::Camera;
 use cgmath::prelude::*;
 use wgpu::*;
 
@@ -15,55 +15,52 @@ pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
  * VERTEX STUFF
  ****************************************************************************************/
 
-pub trait VertexBufferTrait
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceBuffer 
 {
-    fn desc() -> VertexBufferLayout<'static>;
+    pub model: [[f32; 4]; 4],
 }
 
-#[macro_export]
-macro_rules! define_instance_buffer 
+impl InstanceBuffer
 {
-    ($name:ident, $(($field:ident, $size:expr, $format:expr, $location:expr)),*) => {
-        #[repr(C)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-        pub struct $name {
-            $(
-                pub $field: $size,
-            )*
+    pub fn desc(location: u32) -> VertexBufferLayout<'static>
+    {
+        VertexBufferLayout 
+        {
+            array_stride: std::mem::size_of::<InstanceBuffer>() as BufferAddress,
+            step_mode: VertexStepMode::Instance,
+            attributes: 
+                &[
+                    VertexAttribute {
+                        offset: 0,
+                        shader_location: location,
+                        format: VertexFormat::Float32x4,
+                    },
+                    VertexAttribute {
+                        offset: std::mem::size_of::<[f32; 4]>() as BufferAddress,
+                        shader_location: location + 1,
+                        format: VertexFormat::Float32x4,
+                    },
+                    VertexAttribute {
+                        offset: std::mem::size_of::<[f32; 8]>() as BufferAddress,
+                        shader_location: location + 2,
+                        format: VertexFormat::Float32x4,
+                    },
+                    VertexAttribute {
+                        offset: std::mem::size_of::<[f32; 12]>() as BufferAddress,
+                        shader_location: location + 3,
+                        format: VertexFormat::Float32x4,
+                    },
+                ],
         }
-
-        impl VertexBufferTrait for $name {
-            fn desc() -> VertexBufferLayout<'static> {
-                use std::mem;
-                let mut attributes = Vec::new();
-                let mut offset = 0;
-
-                $(
-                    let field_size = mem::size_of::<$size>() as BufferAddress;
-                    for i in 0..$size.len() {
-                        attributes.push(VertexAttribute {
-                            offset,
-                            shader_location: $location + i as u32,
-                            format: $format,
-                        });
-                        offset += mem::size_of::<f32>() as BufferAddress * $size[i].len();
-                    }
-                )*
-
-                VertexBufferLayout {
-                    array_stride: offset,
-                    step_mode: VertexStepMode::Instance,
-                    attributes: &attributes,
-                }
-            }
-        }
-    };
+    }
 }
 
 
 #[macro_export]
 macro_rules! define_vertex_buffer {
-    ($name:ident, $(($field:ident, $size:expr, $format:expr, $location:expr)),*) => {
+    ($name:ident, $(($field:ident, $size:ty, $format:expr, $location:expr)),*) => {
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
         pub struct $name 
@@ -73,7 +70,7 @@ macro_rules! define_vertex_buffer {
             )*
         }
 
-        impl VertexBufferTrait for $name {
+        impl $name {
             fn desc() -> VertexBufferLayout<'static> {
                 use std::mem;
                 let mut attributes = Vec::new();
@@ -122,6 +119,7 @@ macro_rules! create_index_buffer {
         })
     };
 }
+
 
 
 
@@ -236,25 +234,6 @@ pub struct CameraUniform
     proj: [[f32; 4]; 4],
     view_position: [f32; 4],
 }
-impl CameraUniform 
-{
-    pub fn new() -> Self
-    {
-        Self 
-        {
-            view: cgmath::Matrix4::identity().into(),
-            proj: cgmath::Matrix4::identity().into(),
-            view_position: [0.0; 4]
-        }
-    }
-}
-
-pub fn camera_to_uniform(camera: &Camera, uniform: &mut CameraUniform) 
-{
-    uniform.view_position = camera.position.to_homogeneous().into();
-    uniform.proj = camera.projection.calc_matrix().into();
-    uniform.view = camera.calc_matrix().into();
-}
 
 
 #[repr(C)]
@@ -268,70 +247,121 @@ pub struct MaterialUniform
 }
 
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct LightUniform
+{
+    position: [f32; 4],
+    color: [f32; 4],
+    intensity: f32,
+    _padding: f32,
+}
+
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PlayerUniform
+{
+    pub model: [[f32; 4]; 4],
+}
+
+
+
+impl CameraUniform 
+{
+    pub fn new() -> Self
+    {
+        Self 
+        {
+            view: cgmath::Matrix4::identity().into(),
+            proj: cgmath::Matrix4::identity().into(),
+            view_position: [0.0; 4]
+        }
+    }
+
+    pub fn new_with(camera: &Camera) -> Self
+    {
+        Self 
+        {
+            view: camera.calc_matrix().into(),
+            proj: camera.projection.calc_matrix().into(),
+            view_position: camera.position.to_homogeneous().into()
+        }
+    }
+}
+
+pub fn camera_to_uniform(camera: &Camera, uniform: &mut CameraUniform) 
+{
+    uniform.view_position = camera.position.to_homogeneous().into();
+    uniform.proj = camera.projection.calc_matrix().into();
+    uniform.view = camera.calc_matrix().into();
+}
+
 /****************************************************************************************
  * PIPELINE and RENDER PASS MACROS
  ****************************************************************************************/
 
 
+pub fn alphablend_color_target_state(format: TextureFormat) -> ColorTargetState 
+{
+    ColorTargetState 
+    {
+        format,
+        blend: Some(BlendState 
+        {
+            color: BlendComponent 
+            {
+                src_factor: BlendFactor::SrcAlpha,
+                dst_factor: BlendFactor::OneMinusSrcAlpha,
+                operation: BlendOperation::Add,
+            },
+            alpha: BlendComponent 
+            {
+                src_factor: BlendFactor::One,
+                dst_factor: BlendFactor::One,
+                operation: BlendOperation::Add,
+            },
+        }),
+        write_mask: ColorWrites::ALL,
+    }
+} 
 
-#[macro_export]
-macro_rules! create_pipline_layout {
-    ($device:expr, $bind_groups:expr, $push_constants:expr) => {
-        $device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Render Pipeline Layout"),
-            bind_group_layouts: $bind_groups,
-            push_constant_ranges: $push_constants,
-        })
-    };
+
+pub fn primitive_state(topology: PrimitiveTopology, polygon_mode: PolygonMode) -> PrimitiveState 
+{
+    PrimitiveState 
+    {
+        topology,
+        strip_index_format: None,
+        front_face: FrontFace::Cw,
+        cull_mode: Some(Face::Back),
+        unclipped_depth: false,
+        polygon_mode,
+        conservative: false,
+    }
 }
 
 
-#[macro_export]
-macro_rules! create_pipeline_descriptor {
-    ($layout:expr, $vs:expr, $fs:expr, $primitive:expr, $color_states:expr, $depth_stencil_state:expr, $multisample_state:expr) => {
-        RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&$layout),
-            vertex: VertexState {
-                module: &$vs,
-                entry_point: "main",
-                buffers: &[],
-            },
-            fragment: Some(FragmentState {
-                module: &$fs,
-                entry_point: "main",
-                targets: $color_states,
-            }),
-            primitive: $primitive,
-            depth_stencil: Some($depth_stencil_state),
-            multisample: $multisample_state,
-        }
-    };
+pub fn depth_stencil_state(format: TextureFormat, depth_write_enabled: bool, depth_compare: CompareFunction) -> DepthStencilState 
+{
+    DepthStencilState 
+    {
+        format,
+        depth_write_enabled,
+        depth_compare,
+        stencil: StencilState::default(),
+        bias: DepthBiasState::default(),
+    }
 }
 
-
-
-#[macro_export]
-macro_rules! create_pipeline {
-    ($device:expr, $layout:expr, $vs:expr, $fs:expr, $primitive:expr, $color_states:expr, $depth_stencil_state:expr, $multisample_state:expr) => {
-        $device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&$layout),
-            vertex: VertexState {
-                module: &$vs,
-                entry_point: "main",
-                buffers: &[],
-            },
-            fragment: Some(FragmentState {
-                module: &$fs,
-                entry_point: "main",
-                targets: $color_states,
-            }),
-            primitive: $primitive,
-            depth_stencil: Some($depth_stencil_state),
-            multisample: $multisample_state,
-        })
-    };
+pub fn multisample_state(count: u32) -> MultisampleState 
+{
+    MultisampleState 
+    {
+        count,
+        mask: !0,
+        alpha_to_coverage_enabled: false,
+    }
 }
 
 
