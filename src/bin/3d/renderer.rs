@@ -1,157 +1,372 @@
-use kaos::renderer::CameraUniform;
+use kaos::renderer::{update_camera_uniform, CameraUniform, MaterialUniform};
 
 struct Renderer
 {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    surface: wgpu::Surface,
-    config: wgpu::SurfaceConfiguration,
-    layouts: Layouts,
+    device: Device,
+    queue: Queue,
+    surface: Surface,
+    config: SurfaceConfiguration,
     pipelines: Pipelines,
-    shaders: Shaders,
-    vertex_buffers: VertexBuffers,
-    uniforms: Uniforms,
-}
-struct Layouts
-{
-    camera: wgpu::BindGroupLayout,
-    material: wgpu::BindGroupLayout,
-    vertex0: wgpu::VertexBufferLayout<'static>,
-    vertex1: wgpu::VertexBufferLayout<'static>,
-    instance: wgpu::VertexBufferLayout<'static>,
-    pipeline1: wgpu::PipelineLayout,
-    pipeline2: wgpu::PipelineLayout,
+    buffers: Buffers,
+    textures: Textures,
 }
 struct Pipelines
-{
-    floor: wgpu::RenderPipeline,
-    final: wgpu::RenderPipeline,
+{    
+    camera: BindGroupLayout,
+    material: BindGroupLayout,
+    vertex0: VertexBufferLayout<'static>,
+    vertex1: VertexBufferLayout<'static>,
+    instance: VertexBufferLayout<'static>,
+    pipelinelayout: PipelineLayout,
+    pipeline0: RenderPipeline,
+    pipeline1: RenderPipeline,
+    shader0: ShaderModule,    
+    shader1: ShaderModule
 }
-struct Uniforms
+struct Buffers
 {
-    camera: CameraBuffer,
-    materials: Vec<MaterialBuffer>,
+    vertex_buffers: Vec<Buffer>,
+    instance_buffers: Vec<Buffer>,
+    index_buffers: Vec<Buffer>,
+    camera_buffer: Buffer,
+    material_buffers: Vec<Buffer>
 }
-struct Shaders
+struct BindGroups
 {
-    shader1: wgpu::ShaderModule,
-    shader2: wgpu::ShaderModule,
+    camera: BindGroup,
+    materials: Vec<BindGroup>
 }
-struct VertexBuffers
+struct Textures
 {
-    vertex_buffers: Vec<wgpu::Buffer>,
-    instance_buffers: Vec<wgpu::Buffer>,
+    textures: Vec<Texture>,
+    sampler0: Sampler,
 }
+
+
+// Define the vertex buffer layouts that we are going to use in our renderer
 define_vertex_buffer!(
     VertexBuffer0,
-    (position, wgpu::VertexFormat::Float32x3, 0),
+    (position, [f32;3], VertexFormat::Float32x3, 0)
 );
 define_vertex_buffer!(
     VertexBuffer1,
-    (position, wgpu::VertexFormat::Float32x3, 0),
-    (uv, wgpu::VertexFormat::Float32x2, 1),
-    (normal, wgpu::VertexFormat::Float32x3, 2)
+    (position, [f32;3], VertexFormat::Float32x3, 0)
+    (uv, [f32;2], VertexFormat::Float32x2, 1)
+    (normal, [f32;3], VertexFormat::Float32x3, 2)
 );
 define_instance_buffer!(
     InstanceBuffer,
-    (model, [[f32; 4]; 4], wgpu::VertexFormat::Float32x4, 5)
+    (model, [[f32; 4]; 4], VertexFormat::Float32x4, 3)
 );
 
 
 
-impl Renderer
+impl Pipelines
 {
-    pub fn new(
-        device: wgpu::Device, 
-        queue: wgpu::Queue, 
-        size: winit::dpi::PhysicalSize<u32>, 
-        surface: wgpu::Surface,
-        config: wgpu::SurfaceConfiguration,
-    ) -> Self
+    fn new(device: &Device, config: &SurfaceConfiguration) -> Self
     {
         let vertex_buffer_layout0 = VertexBuffer0::desc(device);
         let vertex_buffer_layout1 = VertexBuffer1::desc(device);
         let instance_buffer_layout = InstanceBuffer::desc(device);
-        let camera_bind_group_layout = CameraUniform::desc(device);
-        let material_bind_group_layout = MaterialBuffer::desc(device);
-        let pipeline_layout1 = wgpu::PipelineLayoutDescriptor
-        {
-            label: Some("Pipeline Layout 1"),
-            bind_group_layouts: &[&camera_bind_group_layout, &material_bind_group_layout],
-            push_constant_ranges: &[],
-        };
-        let pipeline_layout2 = wgpu::PipelineLayoutDescriptor
-        {
-            label: Some("Pipeline Layout 2"),
-            bind_group_layouts: &[&camera_bind_group_layout, &material_bind_group_layout],
-            push_constant_ranges: &[],
-        };
-        let pipeline1 = create_render_pipeline!(device, pipeline_layout1, vertex_buffer_layout0, vertex_buffer_layout1, instance_buffer_layout, "shader1");
-        let pipeline2 = create_render_pipeline!(device, pipeline_layout2, vertex_buffer_layout0, vertex_buffer_layout1, instance_buffer_layout, "shader2");
-        let shader1 = wgpu::ShaderModuleDescriptor
-        {
-            label: Some("Shader 1"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader1.wgsl").into()),
-        };
-        let shader2 = wgpu::ShaderModuleDescriptor
-        {
-            label: Some("Shader 2"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader2.wgsl").into()),
-        };
+        let camera_bind_group_layout = device.create_bind_group_layout(
+            &BindGroupLayoutDescriptor
+            {
+                label: Some("Camera Bind Group Layout"),
+                entries: &[uniform_bindgroup_layout_entry!(0, ShaderStage::FRAGMENT)],
+            }
+        );
+        let material_bind_group_layout = device.create_bind_group_layout(
+            &BindGroupLayoutDescriptor
+            {
+                label: Some("Material Bind Group Layout"),
+                entries: &[
+                    sampler_bindgroup_layout_entry!(0, SamplerBindingType::Filtering, ShaderStage::FRAGMENT),
+                    texture_bindgroup_layout_entry!(1, ShaderStage::FRAGMENT),
+                    uniform_bindgroup_layout_entry!(2, ShaderStage::FRAGMENT)],
+            }
+        );
+        let pipeline_layout0 = device.create_pipeline_layout(
+            &PipelineLayoutDescriptor
+            {
+                label: Some("Pipeline Layout 1"),
+                bind_group_layouts: &[&camera_bind_group_layout, &material_bind_group_layout],
+                push_constant_ranges: &[],
+            }
+        );
 
-        let layouts = Layouts
+        let shader0 = device.create_shader_module(wgpu::include_wgsl!("shaders/floor.wgsl"));
+        let shader1 = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
+
+        let pipeline0 = device.create_render_pipeline(
+            &RenderPipelineDescriptor
+            {
+                label: Some("Render Pipeline 1"),
+                layout: Some(&pipeline_layout0),
+                vertex: VertexState
+                {
+                    module: &shader0,
+                    entry_point: "vs_main",
+                    buffers: &[vertex_buffer_layout0, instance_buffer_layout],
+                },
+                fragment: Some(FragmentState
+                {
+                    module: &shader0,
+                    entry_point: "fs_main",
+                    targets: &[ColorTargetState
+                    {
+                        format: config.format,
+                        blend: Some(BlendState::ALPHA_BLENDING),
+                        write_mask: ColorWrite::ALL,
+                    }],
+                }),
+                primitive: PrimitiveState
+                {
+                    topology: PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: FrontFace::Ccw,
+                    cull_mode: Some(Face::Back),
+                    polygon_mode: PolygonMode::Fill,
+                    clamp_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(DepthStencilState
+                {
+                    format: TextureFormat::Depth24Plus,
+                    depth_write_enabled: true,
+                    depth_compare: CompareFunction::Less,
+                    stencil: StencilState
+                    {
+                        front: StencilFaceState::IGNORE,
+                        back: StencilFaceState::IGNORE,
+                        read_mask: 0,
+                        write_mask: 0,
+                    },
+                    bias: DepthBiasState
+                    {
+                        constant: 0,
+                        slope_scale: 0.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: MultisampleState
+                {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+            }
+        ); 
+        let pipeline1 = device.create_render_pipeline(
+            &RenderPipelineDescriptor
+            {
+                label: Some("Render Pipeline 2"),
+                layout: Some(&pipeline_layout0),
+                vertex: VertexState
+                {
+                    module: &shader1,
+                    entry_point: "vs_main",
+                    buffers: &[vertex_buffer_layout1, instance_buffer_layout],
+                },
+                fragment: Some(FragmentState
+                {
+                    module: &shader1,
+                    entry_point: "fs_main",
+                    targets: &[ColorTargetState
+                    {
+                        format: config.format,
+                        blend: Some(BlendState::ALPHA_BLENDING),
+                        write_mask: ColorWrite::ALL,
+                    }],
+                }),
+                primitive: PrimitiveState
+                {
+                    topology: PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: FrontFace::Ccw,
+                    cull_mode: Some(Face::Back),
+                    polygon_mode: PolygonMode::Fill,
+                    clamp_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(DepthStencilState
+                {
+                    format: TextureFormat::Depth24Plus,
+                    depth_write_enabled: true,
+                    depth_compare: CompareFunction::Less,
+                    stencil: StencilState
+                    {
+                        front: StencilFaceState::IGNORE,
+                        back: StencilFaceState::IGNORE,
+                        read_mask: 0,
+                        write_mask: 0,
+                    },
+                    bias: DepthBiasState
+                    {
+                        constant: 0,
+                        slope_scale: 0.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: MultisampleState
+                {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+            }
+        );
+        Self
         {
             camera: camera_bind_group_layout,
             material: material_bind_group_layout,
             vertex0: vertex_buffer_layout0,
             vertex1: vertex_buffer_layout1,
             instance: instance_buffer_layout,
-            pipeline1: pipeline_layout1,
-            pipeline2: pipeline_layout2,
-        };
-        let pipelines = Pipelines
-        {
-            floor: pipeline1,
-            final: pipeline2,
-        };
-        let shaders = Shaders
-        {
-            shader1: device.create_shader_module(&shader1),
-            shader2: device.create_shader_module(&shader2),
-        };
-        let vertex_buffers = VertexBuffers
-        {
-            vertex_buffers: Vec::new(),
-            instance_buffers: Vec::new(),
-        };
-        let uniforms = Uniforms
-        {
-            camera: CameraBuffer::new(device),
-            materials: Vec::new(),
-        };
+            pipelinelayout: pipeline_layout0,
+            pipeline0,
+            pipeline1,
+            shader0,
+            shader1,
+        }
+    }
+}
 
+
+
+
+impl Buffers
+{
+    fn new(device: &Device) -> Self
+    {
+        let vertex = vec![];
+        let instance = vec![];
+        let index = vec![];
+        let material = vec![];
+        let camera_uniform = CameraUniform::new();
+        let camera = device.create_buffer_init(
+            &BufferInitDescriptor
+            {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            }
+        );
+        Self
+        {
+            vertex,
+            index,
+            instance,
+            camera,
+            material,
+        }
+    }
+}
+
+
+
+impl Textures
+{
+    fn new(device: &Device) -> Self
+    {
+        let textures = vec![];
+        let sampler0 = device.create_sampler(
+            &SamplerDescriptor
+            {
+                label: Some("Sampler 0"),
+                address_mode_u: AddressMode::ClampToEdge,
+                address_mode_v: AddressMode::ClampToEdge,
+                address_mode_w: AddressMode::ClampToEdge,
+                mag_filter: FilterMode::Linear,
+                min_filter: FilterMode::Linear,
+                mipmap_filter: FilterMode::Linear,
+                lod_min_clamp: -100.0,
+                lod_max_clamp: 100.0,
+                compare: None,
+                anisotropy_clamp: None,
+                border_color: None,
+            }
+        );
+        Self
+        {
+            textures,
+            sampler0,
+        }
+    }
+}
+
+
+impl BindGroups
+{
+    fn new(device: &Device, buffers: &Buffers, textures: &Textures, pipelines: &Pipelines) -> Self
+    {
+        let camera = device.create_bind_group(
+            &BindGroupDescriptor
+            {
+                layout: &pipelines.camera,
+                entries: &[uniform_bindgroup_entry!(0, &buffers.camera_buffer.as_entire_binding())],
+                label: Some("Camera Bind Group"),
+            }
+        );
+        let materials = vec![];
+        Self
+        {
+            camera,
+            materials,
+        }
+    }
+    fn add_material(&mut self, diffuse_texture: &Texture, materials: &Buffer)
+    {
+        let bind_group = device.create_bind_group(
+                &wgpu::BindGroupDescriptor {
+                layout: self.pipelines.material,
+                entries: &[
+                    sampler_bindgroup_entry!(0, &self.textures.sampler0),
+                    texture_bindgroup_entry!(1, &diffuse_texture),
+                    uniform_bindgroup_entry!(2, &material_buffer.as_entire_binding()),
+                ],
+                label: None,
+        });
+        self.material.push(bind_group);
+    }
+}
+
+
+
+
+
+
+impl Renderer
+{
+    pub fn new(
+        device: Device, 
+        queue: Queue, 
+        size: winit::dpi::PhysicalSize<u32>, 
+        surface: Surface,
+        config: SurfaceConfiguration,
+    ) -> Self
+    {
+        let pipelines = Pipelines::new(&device, &config);
+        let buffers = Buffers::new(&device);
+        let textures = Textures::new(&device);
         Self
         {
             device,
             queue,
             surface,
             config,
-            layouts,
             pipelines,
-            shaders,
-            vertex_buffers,
-            uniforms,
+            buffers,
+            textures,
         }
-
     }
 
-    pub fn render(&mut self, scene: &Scene) -> Result<(), wgpu::SurfaceError> 
+    pub fn render(&mut self, scene: &Scene, dt: f32) -> Result<(), SurfaceError> 
     { 
-        self._update_scene(&scene);
+        self._update_scene(&scene , dt);
         let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = output.texture.create_view(&TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(
-            &wgpu::CommandEncoderDescriptor 
+            &CommandEncoderDescriptor 
             {
                 label: Some("Render Encoder"),
             }
@@ -178,30 +393,41 @@ impl Renderer
     }
 
 
-    fn _update_scene(&mut self, scene: &Scene)
+    fn _update_scene(&mut self, scene: &Scene, dt: f32)
     {
-        self.uniforms.camera.update(scene.camera);
-        self.uniforms.materials.clear();
-        for material in &scene.materials
-        {
-            self.uniforms.materials.push(MaterialBuffer::new(self.device, material));
-        }
+        let camera_uniform = CameraUniform::new();
+        camera_to_uniform(scene.camera, &mut camera_uniform);
+        queue.write_buffer(&self.buffers.camera, 0, bytemuck::cast_slice(&[self.buffers.camera]));
     }
 
 
 
-    fn load_assets()
+
+    fn load_assets(&mut self, &scene: Scene)
     {
-        let meshes = models.into_iter()
+        let (meshes, materials) = scene.resources;
+        for m in materials? 
+        {
+            let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
+            let material_uniform = MaterialUniform::new(m);
+            let material_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Material Buffer"),
+                contents: bytemuck::cast_slice(&[material_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+            self.bind_groups.add_material(&diffuse_texture, &material_buffer);
+            self.textures.textures.push(diffuse_texture);
+            self.buffers.material.push(material_buffer);
+        }
+        meshes.into_iter()
             .map(|m| 
             {
                 let pos = (0..m.mesh.positions.len() / 3)
                     .map(|i|
-                         [m.mesh.positions[i * 3],
-                          m.mesh.positions[i * 3 + 1],
-                          m.mesh.positions[i * 3 + 2]]
+                         [ m.mesh.positions[i * 3],
+                           m.mesh.positions[i * 3 + 1],
+                           m.mesh.positions[i * 3 + 2]]
                     );
-
                 let uv : Vec<[f32; 2]> = if m.mesh.texcoords.len() > 0 
                 {
                     (0..m.mesh.texcoords.len() / 2)
@@ -214,37 +440,42 @@ impl Renderer
                         .map(|_| [0.0, 0.0])
                         .collect()
                 }; 
-
-                let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 
-                {
+                let normals : Vec<[f32; 3]> = if m.mesh.normals.len() > 0 {
                     (0..m.mesh.normals.len() / 3)
-                        .map(|i| 
-                            [m.mesh.normals[i * 3],
+                        .map(|i| [
+                            m.mesh.normals[i * 3],
                             m.mesh.normals[i * 3 + 1],
-                            m.mesh.normals[i * 3 + 2]]
-                        ).collect()
-                } 
-                else 
+                            m.mesh.normals[i * 3 + 2],
+                        ])
+                        .collect()
+                }
+                else
                 {
                     (0..m.mesh.positions.len() / 3)
                         .map(|_| [0.0, 0.0, 0.0])
                         .collect()
                 };
-
                 let vertices = pos.zip(uv).zip(normals)
                     .map(|((pos, uv), normal)| 
-                    {
-                        VertexBuffer2
+                        VertexBuffer1
                         {
                             position: pos,
                             uv,
                             normal,
-                        }
+                        }).collect::<Vec<_>>();
+                let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+                let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&m.mesh.indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
-                    }).collect::<Vec<_>>();
-
-                let indices = m.mesh.indices.clone();
-            });
+                
+            })
     }
 }
 

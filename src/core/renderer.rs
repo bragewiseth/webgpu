@@ -1,13 +1,7 @@
-/**
- this module is responsible for rendering the scene
- it contains all the necessary bindings and structures that the graphics pipeline needs
- having all the gpu related stuff in one place makes it easier to see what the pipeline is doing and its dependencies
- if i were to build a render pass i need to know what resources it needs and what buffers it needs to bind therefore
- having all the necessary bindings in one place makes it easier to see what the render pass needs
- and what it needs to bind to the gpu
-*/
 use crate::camera::Camera;
 use cgmath::prelude::*;
+use wgpu::*;
+
 
 pub const QUADVERTS: &[[f32; 3]; 4] = &[ [-1.0, -1.0, 0.0], [-1.0,  1.0, 0.0], [ 1.0, -1.0, 0.0], [ 1.0,  1.0, 0.0], ];
 pub const QUADUV: &[[f32; 2]; 4] = &[[0.0, 1.0], [0.0, 0.0], [1.0, 1.0], [1.0, 0.0]];
@@ -17,21 +11,14 @@ pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
 
 
 
-
-
-
 /****************************************************************************************
  * VERTEX STUFF
  ****************************************************************************************/
 
-
-
 pub trait VertexBufferTrait
 {
-    fn desc() -> wgpu::VertexBufferLayout<'static>;
+    fn desc() -> VertexBufferLayout<'static>;
 }
-
-
 
 #[macro_export]
 macro_rules! define_instance_buffer 
@@ -46,26 +33,26 @@ macro_rules! define_instance_buffer
         }
 
         impl VertexBufferTrait for $name {
-            fn desc() -> wgpu::VertexBufferLayout<'static> {
+            fn desc() -> VertexBufferLayout<'static> {
                 use std::mem;
                 let mut attributes = Vec::new();
                 let mut offset = 0;
 
                 $(
-                    let field_size = mem::size_of::<$size>() as wgpu::BufferAddress;
+                    let field_size = mem::size_of::<$size>() as BufferAddress;
                     for i in 0..$size.len() {
-                        attributes.push(wgpu::VertexAttribute {
+                        attributes.push(VertexAttribute {
                             offset,
                             shader_location: $location + i as u32,
                             format: $format,
                         });
-                        offset += mem::size_of::<f32>() as wgpu::BufferAddress * $size[i].len();
+                        offset += mem::size_of::<f32>() as BufferAddress * $size[i].len();
                     }
                 )*
 
-                wgpu::VertexBufferLayout {
+                VertexBufferLayout {
                     array_stride: offset,
-                    step_mode: wgpu::VertexStepMode::Instance,
+                    step_mode: VertexStepMode::Instance,
                     attributes: &attributes,
                 }
             }
@@ -87,14 +74,14 @@ macro_rules! define_vertex_buffer {
         }
 
         impl VertexBufferTrait for $name {
-            fn desc() -> wgpu::VertexBufferLayout<'static> {
+            fn desc() -> VertexBufferLayout<'static> {
                 use std::mem;
                 let mut attributes = Vec::new();
                 let mut offset = 0;
 
                 $(
-                    let field_size = mem::size_of::<$size>() as wgpu::BufferAddress;
-                    attributes.push(wgpu::VertexAttribute {
+                    let field_size = mem::size_of::<$size>() as BufferAddress;
+                    attributes.push(VertexAttribute {
                         offset,
                         shader_location: $location,
                         format: $format,
@@ -102,9 +89,9 @@ macro_rules! define_vertex_buffer {
                     offset += field_size;
                 )*
 
-                wgpu::VertexBufferLayout {
+                VertexBufferLayout {
                     array_stride: offset,
-                    step_mode: wgpu::VertexStepMode::Vertex,
+                    step_mode: VertexStepMode::Vertex,
                     attributes: &attributes,
                 }
             }
@@ -116,10 +103,10 @@ macro_rules! define_vertex_buffer {
 #[macro_export]
 macro_rules! create_vertex_buffer {
     ($device:expr, $vertices:expr) => {
-        $device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        $device.create_buffer_init(&util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice($vertices),
-            usage: wgpu::BufferUsages::VERTEX,
+            usage: BufferUsages::VERTEX,
         })
     };
 }
@@ -128,10 +115,10 @@ macro_rules! create_vertex_buffer {
 #[macro_export]
 macro_rules! create_index_buffer {
     ($device:expr, $indices:expr) => {
-        $device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        $device.create_buffer_init(&util::BufferInitDescriptor {
             label: Some("Index Buffer"),
             contents: bytemuck::cast_slice($indices),
-            usage: wgpu::BufferUsages::INDEX,
+            usage: BufferUsages::INDEX,
         })
     };
 }
@@ -144,62 +131,102 @@ macro_rules! create_index_buffer {
  * BIND GROUP STUFF
  ****************************************************************************************/
 
-
-
-pub trait BindGroupTrait
+pub fn texture_bindgroup_layout_entry(binding: u32, shader_stage: ShaderStages) -> BindGroupLayoutEntry 
 {
-    fn desc(device : &wgpu::Device) -> wgpu::BindGroupLayout;
+    BindGroupLayoutEntry 
+    {
+        binding,
+        visibility: shader_stage,
+        ty: BindingType::Texture {
+            multisampled: false,
+            sample_type: TextureSampleType::Float { filterable: true },
+            view_dimension: TextureViewDimension::D2,
+        },
+        count: None,
+    }
 }
 
-pub trait PushConstantTrait
+pub fn sampler_bindgroup_layout_entry(
+    binding: u32, 
+    samplerbindingtype: SamplerBindingType, 
+    shader_stage: ShaderStages
+) -> BindGroupLayoutEntry 
 {
-    fn desc() -> wgpu::PushConstantRange;
+    BindGroupLayoutEntry 
+    {
+        binding,
+        visibility: shader_stage,
+        ty: BindingType::Sampler(samplerbindingtype),
+        count: None,
+    }
 }
 
-
-#[macro_export]
-macro_rules! define_bind_group {
-    ($name:ident, $(($binding:expr, $visibility:expr, $ty:expr, $count:expr)),*) => {
-        #[repr(C)]
-        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-        pub struct $name 
+pub fn uniform_bindgroup_layout_entry(
+    binding: u32, 
+    shader_stage: ShaderStages
+) -> BindGroupLayoutEntry 
+{
+    BindGroupLayoutEntry 
+    {
+        binding,
+        visibility: shader_stage,
+        ty: BindingType::Buffer 
         {
-            $(
-                pub $field: $size,
-            )*
-        }
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
 
-        impl BindGroupTrait for $name {
-            fn desc(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[
-                        $(
-                            wgpu::BindGroupLayoutEntry {
-                                binding: $binding,
-                                visibility: $visibility,
-                                ty: $ty,
-                                count: $count,
-                            },
-                        )*
-                    ],
-                    label: Some(stringify!($name)),
-                })
+pub fn texture_bindgroup_entry(
+    binding: u32, 
+    texture: &TextureView, 
+) -> BindGroupEntry 
+{
+    BindGroupEntry 
+    {
+        binding,
+        resource: BindingResource::TextureView(texture),
+    }
+}
+
+pub fn sampler_bindgroup_entry(
+    binding: u32, 
+    sampler: &Sampler, 
+) -> BindGroupEntry 
+{
+    BindGroupEntry 
+    {
+        binding,
+        resource: BindingResource::Sampler(sampler),
+    }
+}
+
+
+pub fn uniform_bindgroup_entry(
+    binding: u32, 
+    buffer: &Buffer, 
+) -> BindGroupEntry 
+{
+    BindGroupEntry 
+    {
+        binding,
+        resource: BindingResource::Buffer(
+            BufferBinding 
+            {
+                buffer,
+                offset: 0,
+                size: None,
             }
-        }
-    };
+        ),
+    }
 }
 
-
-#[macro_export]
-macro_rules! create_bind_group {
-    ($device:expr, $layout:expr, $entries:expr) => {
-        $device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &$layout,
-            entries: $entries,
-            label: None,
-        })
-    };
-}
+/****************************************************************************************
+ * USEFUL UNIFORMS
+ ****************************************************************************************/
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -222,36 +249,25 @@ impl CameraUniform
     }
 }
 
-pub fn update_camera_uniform(camera: &Camera, uniform: &mut CameraUniform) 
+pub fn camera_to_uniform(camera: &Camera, uniform: &mut CameraUniform) 
 {
     uniform.view_position = camera.position.to_homogeneous().into();
     uniform.proj = camera.projection.calc_matrix().into();
     uniform.view = camera.calc_matrix().into();
 }
 
-impl BindGroupTrait for CameraUniform
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MaterialUniform
 {
-    fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
-    {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry 
-                {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX ,
-                    ty: wgpu::BindingType::Buffer 
-                    {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ],
-            label: Some("camera_bind_group_layout"),
-        })
-    }
+    color: [f32; 4],
+    roughness: f32,
+    metallic: f32,
+    _padding: f32,
 }
+
+
 /****************************************************************************************
  * PIPELINE and RENDER PASS MACROS
  ****************************************************************************************/
@@ -261,7 +277,7 @@ impl BindGroupTrait for CameraUniform
 #[macro_export]
 macro_rules! create_pipline_layout {
     ($device:expr, $bind_groups:expr, $push_constants:expr) => {
-        $device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        $device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: $bind_groups,
             push_constant_ranges: $push_constants,
@@ -270,19 +286,18 @@ macro_rules! create_pipline_layout {
 }
 
 
-
 #[macro_export]
 macro_rules! create_pipeline_descriptor {
     ($layout:expr, $vs:expr, $fs:expr, $primitive:expr, $color_states:expr, $depth_stencil_state:expr, $multisample_state:expr) => {
-        wgpu::RenderPipelineDescriptor {
+        RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&$layout),
-            vertex: wgpu::VertexState {
+            vertex: VertexState {
                 module: &$vs,
                 entry_point: "main",
                 buffers: &[],
             },
-            fragment: Some(wgpu::FragmentState {
+            fragment: Some(FragmentState {
                 module: &$fs,
                 entry_point: "main",
                 targets: $color_states,
@@ -299,15 +314,15 @@ macro_rules! create_pipeline_descriptor {
 #[macro_export]
 macro_rules! create_pipeline {
     ($device:expr, $layout:expr, $vs:expr, $fs:expr, $primitive:expr, $color_states:expr, $depth_stencil_state:expr, $multisample_state:expr) => {
-        $device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        $device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&$layout),
-            vertex: wgpu::VertexState {
+            vertex: VertexState {
                 module: &$vs,
                 entry_point: "main",
                 buffers: &[],
             },
-            fragment: Some(wgpu::FragmentState {
+            fragment: Some(FragmentState {
                 module: &$fs,
                 entry_point: "main",
                 targets: $color_states,
@@ -323,17 +338,17 @@ macro_rules! create_pipeline {
 #[macro_export]
 macro_rules! create_render_pass {
     ($encoder:expr, $view:expr ) => {
-        $encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        $encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Simple Pass"),
                 color_attachments: &[Some(
-                    wgpu::RenderPassColorAttachment 
+                    RenderPassColorAttachment 
                     {
                         view: &$view,
                         resolve_target: None,
-                        ops: wgpu::Operations 
+                        ops: Operations 
                         {
-                            load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0, }   ),
-                            store: wgpu::StoreOp::Store,
+                            load: LoadOp::Clear( Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0, }   ),
+                            store: StoreOp::Store,
                         },
                     }
                 )],
@@ -343,25 +358,25 @@ macro_rules! create_render_pass {
         })
     };
     ($encoder:expr, $view:expr, $z_buffer:expr) => {
-        $encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        $encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Simple Pass"),
             color_attachments: &[Some(
-                wgpu::RenderPassColorAttachment 
+                RenderPassColorAttachment 
                 {
                     view: &$view,
                     resolve_target: None,
-                    ops: wgpu::Operations 
+                    ops: Operations 
                     {
-                        load: wgpu::LoadOp::Clear( wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0, }   ),
-                        store: wgpu::StoreOp::Store,
+                        load: LoadOp::Clear( Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0, }   ),
+                        store: StoreOp::Store,
                     },
                 }
                 )],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &$z_buffer.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(1.0),
+                        store: StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
@@ -370,90 +385,3 @@ macro_rules! create_render_pass {
         })
     };
 }
-
-
-
-
-
-
-
-
-// impl Resource for Material
-// {
-//     fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
-//     {
-//         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-//             entries: &[
-//                 wgpu::BindGroupLayoutEntry {
-//                     binding: 0,
-//                     visibility: wgpu::ShaderStages::FRAGMENT,
-//                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-//                     count: None,
-//                 },
-//                 wgpu::BindGroupLayoutEntry {
-//                     binding: 1,
-//                     visibility: wgpu::ShaderStages::FRAGMENT,
-//                     ty: wgpu::BindingType::Texture {
-//                         multisampled: false,
-//                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
-//                         view_dimension: wgpu::TextureViewDimension::D2,
-//                     },
-//                     count: None,
-//                 },
-//                 wgpu::BindGroupLayoutEntry 
-//                 {
-//                     binding: 2,
-//                     visibility: wgpu::ShaderStages::FRAGMENT,
-//                     ty: wgpu::BindingType::Buffer 
-//                     {
-//                         ty: wgpu::BufferBindingType::Uniform,
-//                         has_dynamic_offset: false,
-//                         min_binding_size: None,
-//                     },
-//                     count: None,
-//                 },
-//             ],
-//             label: Some("material_bind_group_layout"),
-//         })
-//     }
-// }
-
-
-
-// impl Resource for Framebuffer
-// {
-//     fn desc( device : &wgpu::Device ) -> wgpu::BindGroupLayout
-//     {
-//         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-//             entries: &[
-//                 wgpu::BindGroupLayoutEntry {
-//                     binding: 0,
-//                     visibility: wgpu::ShaderStages::FRAGMENT,
-//                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-//                     count: None,
-//                 },
-//                 wgpu::BindGroupLayoutEntry {
-//                     binding: 1,
-//                     visibility: wgpu::ShaderStages::FRAGMENT,
-//                     ty: wgpu::BindingType::Texture {
-//                         multisampled: false,
-//                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
-//                         view_dimension: wgpu::TextureViewDimension::D2,
-//                     },
-//                     count: None,
-//                 },
-//                 wgpu::BindGroupLayoutEntry {
-//                     binding: 2,
-//                     visibility: wgpu::ShaderStages::FRAGMENT,
-//                     ty: wgpu::BindingType::Texture {
-//                         multisampled: false,
-//                         sample_type: wgpu::TextureSampleType::Depth,
-//                         view_dimension: wgpu::TextureViewDimension::D2,
-//                     },
-//                     count: None,
-//                 },
-//             ],
-//             label: Some("framebuffer_bind_group_layout"),
-//         })
-//     }
-// }

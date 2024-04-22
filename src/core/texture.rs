@@ -1,62 +1,61 @@
 use image::GenericImageView;
 use anyhow::*;
 use cfg_if::cfg_if;
+use wgpu::*;
 
 
-pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float; // 1.
+pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float; // 1.
     
 
 
 
 pub fn from_bytes(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    bytes: &[u8], 
-    label: &str
-) -> Result<wgpu::Texture>
+    device: &Device,
+    queue: &Queue,
+    bytes: &[u8] 
+) -> Result<Texture>
 {
     let img = image::load_from_memory(bytes)?;
-    from_image(device, queue, &img, Some(label))
+    from_image(device, queue, &img)
 }
 
 
 
 pub fn from_image(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    img: &image::DynamicImage,
-    label: Option<&str>
-) -> Result<wgpu::Texture> 
+    device: &Device,
+    queue: &Queue,
+    img: &image::DynamicImage
+) -> Result<Texture> 
 {
     let rgba = img.to_rgba8();
     let dimensions = img.dimensions();
 
-    let size = wgpu::Extent3d {
+    let size = Extent3d {
         width: dimensions.0,
         height: dimensions.1,
         depth_or_array_layers: 1,
     };
     let texture = device.create_texture(
-        &wgpu::TextureDescriptor {
-            label,
+        &TextureDescriptor {
+            label: Some("Loaded Texture"),
             size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Bgra8UnormSrgb,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             view_formats: &[],
         }
     );
     queue.write_texture(
-        wgpu::ImageCopyTexture {
-            aspect: wgpu::TextureAspect::All,
+        ImageCopyTexture {
+            aspect: TextureAspect::All,
             texture: &texture,
             mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
+            origin: Origin3d::ZERO,
         },
         &rgba,
-        wgpu::ImageDataLayout {
+        ImageDataLayout {
             offset: 0,
             bytes_per_row: Some(4 * dimensions.0),
             rows_per_image: Some(dimensions.1),
@@ -70,22 +69,20 @@ pub fn from_image(
 
 
 pub fn create_depth_texture(
-    device: &wgpu::Device,
-    size : wgpu::Extent3d,
-    label: &str,
-    filter: wgpu::FilterMode,
-) -> wgpu::Texture
+    device: &Device,
+    size : Extent3d,
+) -> Texture
 {
 
-    let desc = wgpu::TextureDescriptor {
-        label: Some(label),
+    let desc = TextureDescriptor {
+        label: Some("Depth Texture"),
         size,
         mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
+        dimension: TextureDimension::D2,
         format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
-            | wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: TextureUsages::RENDER_ATTACHMENT // 3.
+            | TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     };
     let texture = device.create_texture(&desc);
@@ -97,39 +94,38 @@ pub fn create_depth_texture(
 
 
 
-pub fn default_white(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Texture
+pub fn default_white(device: &Device, queue: &Queue) -> Texture
 {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
+    let texture = device.create_texture(&TextureDescriptor {
         label: Some("Default White Texture"),
-        size: wgpu::Extent3d {
+        size: Extent3d {
             width: 1, 
             height: 1, 
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2, 
-        // format: wgpu::TextureFormat::Bgra8UnormSrgb,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        dimension: TextureDimension::D2, 
+        format: TextureFormat::Rgba8UnormSrgb,
+        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
         view_formats: &[],
     });
 
     let white_pixel = [255u8, 255u8, 255u8, 255u8];
     queue.write_texture(
-        wgpu::ImageCopyTexture {
+        ImageCopyTexture {
             texture: &texture,
             mip_level: 0, 
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
+            origin: Origin3d::ZERO,
+            aspect: TextureAspect::All,
         },
         &white_pixel, 
-        wgpu::ImageDataLayout {
+        ImageDataLayout {
             offset: 0, 
             bytes_per_row: Some(4), 
             rows_per_image: None,
         },
-        wgpu::Extent3d {
+        Extent3d {
             width: 1, 
             height: 1, 
             depth_or_array_layers: 1,
@@ -140,23 +136,21 @@ pub fn default_white(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Textur
 
 
 
-pub fn create_blank_texture(
-    device: &wgpu::Device, 
-    size : wgpu::Extent3d,
-    label: &str,
-    filter: wgpu::FilterMode,
-) -> wgpu::Texture
+pub fn create_frame_texture(
+    device: &Device, 
+    size : Extent3d,
+    config: &SurfaceConfiguration,
+) -> Texture
 {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
+    let texture = device.create_texture(&TextureDescriptor {
         size, 
         mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-        // format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        dimension: TextureDimension::D2,
+        format: config.format,
+        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
-        label: Some(label),
+        label: Some("Frame Texture"),
     });
     texture
 }
@@ -187,13 +181,13 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
 
 pub async fn load_texture(
     file_name: &str,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-) -> anyhow::Result<wgpu::Texture> 
+    device: &Device,
+    queue: &Queue,
+) -> anyhow::Result<Texture> 
 {
     if file_name.is_empty() {
         return Ok(default_white(device,queue));
     }
     let data = load_binary(file_name).await?;
-    from_bytes(device, queue, &data, file_name)
+    from_bytes(device, queue, &data)
 }

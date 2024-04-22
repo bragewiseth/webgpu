@@ -39,7 +39,8 @@ macro_rules! event_loop
         key_input_handle        => $key_input:expr,
         device_input_handle     => $device_input:expr,
         mousewheel_input_handle => $mousewheel_input:expr,
-        update_handle           => $update:expr
+        update_handle           => $update:expr,
+        scene                   => $scene:expr
     ) =>
     {
         event_loop.run(
@@ -101,8 +102,7 @@ macro_rules! event_loop
                     let now = instant::Instant::now();
                     let dt = now - last_render_time;
                     last_render_time = now;
-                    $update(dt);
-                    match render()
+                    match $update(&$scene,dt);
                     {
                         Ok(_) => {}
                         Err(wgpu::SurfaceError::Lost) => $window.resize($size),
