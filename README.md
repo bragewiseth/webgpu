@@ -1,10 +1,4 @@
-# *F✦STOP* Graphics Engine
-
-🏗️work in progress 
-
-<img src="/assets/fstopwhite.png" alt="logo" width="250"/>
-
-*F✦STOP* Is a graphics engine written in rust, it is based on the wgpu library so it runs on the web as well!
+wgpu demo
 
 - [ ] Raytracing
 - [x] .obj support
