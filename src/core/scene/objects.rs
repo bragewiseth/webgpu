@@ -10,11 +10,11 @@ pub struct Instance
 
 pub struct Player
 {
-    position: cgmath::Vector3<f32>,
-    rotation: cgmath::Quaternion<f32>,
-    scale: cgmath::Vector3<f32>,
-    velocity: cgmath::Vector3<f32>,
-    acceleration: cgmath::Vector3<f32>,
+    pub position: cgmath::Vector3<f32>,
+    pub rotation: cgmath::Quaternion<f32>,
+    pub scale: cgmath::Vector3<f32>,
+    pub velocity: cgmath::Vector3<f32>,
+    pub acceleration: cgmath::Vector3<f32>,
 }
 
 pub struct StaticObject

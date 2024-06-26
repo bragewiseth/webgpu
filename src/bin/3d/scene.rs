@@ -1,4 +1,9 @@
 use cgmath::prelude::*;
+use tobj;
+use wgpu::SurfaceConfiguration;
+use crate::kaos::scene::assets::load_model;
+use crate::kaos::scene::camera::*;
+use crate::kaos::scene::objects::*;
 
 
 pub struct Scene
@@ -14,7 +19,7 @@ pub struct Scene
 
 impl Scene
 {
-    pub fn new() -> Self
+    pub async fn new(config: &SurfaceConfiguration) -> Self
     {
         let camera = Camera::new(
             cgmath::Point3::new(0.0, -10.0, 0.0),
@@ -48,12 +53,44 @@ impl Scene
             },
         ];
 
-        let cube = load_model("cube.obj").unwrap();
-        let sphere = load_model("sphere.obj").unwrap();
-        let floor = load_model("floor.obj").unwrap();
-        let resources = (vec![cube.0, sphere.0, floor.0], vec![cube.1, sphere.1]);
+        let cube = load_model("cube.obj").await.unwrap();
+        let mut sphere = load_model("sphere.obj").await.unwrap();
+        let mut floor = load_model("floor.obj").await.unwrap();
+        let mut meshes = cube.0;
+        Vec::append(&mut meshes, &mut sphere.0);
+        Vec::append(&mut meshes, &mut floor.0);
+        let mut materials = cube.1;
+        Vec::append(&mut materials, &mut sphere.1);
+        Vec::append(&mut materials, &mut floor.1);
+        let resources = (meshes, materials);
         Self { resources, instances, camera, light, player }
     }
+
+    pub fn update(&mut self, delta_time: f32)
+    {
+
+    }
+
+    pub fn key_input(&mut self, )
+    {
+
+    }
+
+    pub fn mousewheel_input(&mut self, delta: winit::event::MouseScrollDelta)
+    {
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32)
+    {
+
+    }
+    
+    pub fn device_input(&mut self, device: &winit::event::DeviceId, event: winit::event::DeviceEvent)
+    {
+
+    }
+
+
 }
 
 

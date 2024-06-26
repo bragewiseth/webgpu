@@ -271,7 +271,7 @@ pub fn new_window(title: &str) -> (winit::event_loop::EventLoop<()>, winit::wind
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-    window.request_inner_size(winit::dpi::PhysicalSize::new(1500, 1500));
+    let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(1500, 1500));
 
     #[cfg(target_arch = "wasm32")]
     {

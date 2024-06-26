@@ -15,46 +15,47 @@ pub const QUADMESH_INDICES: &[u32] = &[2, 1, 0, 3, 1, 2];
  * VERTEX STUFF
  ****************************************************************************************/
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceBuffer 
-{
-    pub model: [[f32; 4]; 4],
-}
 
-impl InstanceBuffer
+
+#[macro_export]
+macro_rules! define_instance_buffer 
 {
-    pub fn desc(location: u32) -> VertexBufferLayout<'static>
-    {
-        VertexBufferLayout 
-        {
-            array_stride: std::mem::size_of::<InstanceBuffer>() as BufferAddress,
-            step_mode: VertexStepMode::Instance,
-            attributes: 
-                &[
-                    VertexAttribute {
-                        offset: 0,
-                        shader_location: location,
-                        format: VertexFormat::Float32x4,
-                    },
-                    VertexAttribute {
-                        offset: std::mem::size_of::<[f32; 4]>() as BufferAddress,
-                        shader_location: location + 1,
-                        format: VertexFormat::Float32x4,
-                    },
-                    VertexAttribute {
-                        offset: std::mem::size_of::<[f32; 8]>() as BufferAddress,
-                        shader_location: location + 2,
-                        format: VertexFormat::Float32x4,
-                    },
-                    VertexAttribute {
-                        offset: std::mem::size_of::<[f32; 12]>() as BufferAddress,
-                        shader_location: location + 3,
-                        format: VertexFormat::Float32x4,
-                    },
-                ],
+    ($name:ident, $(($field:ident, $size:ty, $format:expr, $location:expr, $divide:expr)),*) => {
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        pub struct $name {
+            $(
+                pub $field: $size,
+            )*
         }
-    }
+
+        impl $name {
+            fn desc() -> VertexBufferLayout<'static> 
+            {
+                use std::mem;
+                let mut attributes = Vec::new();
+                let mut offset = 0;
+
+                $(
+                    for i in 0..$divide
+                    {
+                        attributes.push(VertexAttribute {
+                            offset,
+                            shader_location: $location + i as u32,
+                            format: $format,
+                        });
+                        offset += mem::size_of::<$size>() as BufferAddress / $divide as BufferAddress;
+                    }
+                )*
+
+                VertexBufferLayout {
+                    array_stride: offset,
+                    step_mode: VertexStepMode::Instance,
+                    attributes: &attributes,
+                }
+            }
+        }
+    };
 }
 
 
@@ -180,13 +181,13 @@ pub fn uniform_bindgroup_layout_entry(
 
 pub fn texture_bindgroup_entry(
     binding: u32, 
-    texture: &TextureView, 
+    texture_view: &TextureView,
 ) -> BindGroupEntry 
 {
     BindGroupEntry 
     {
         binding,
-        resource: BindingResource::TextureView(texture),
+        resource: BindingResource::TextureView(texture_view),
     }
 }
 
@@ -205,20 +206,13 @@ pub fn sampler_bindgroup_entry(
 
 pub fn uniform_bindgroup_entry(
     binding: u32, 
-    buffer: &Buffer, 
-) -> BindGroupEntry 
+    buffer: BindingResource<'static>,
+) -> BindGroupEntry<'static>
 {
     BindGroupEntry 
     {
         binding,
-        resource: BindingResource::Buffer(
-            BufferBinding 
-            {
-                buffer,
-                offset: 0,
-                size: None,
-            }
-        ),
+        resource: buffer,
     }
 }
 
@@ -230,9 +224,9 @@ pub fn uniform_bindgroup_entry(
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform 
 {
-    view: [[f32; 4]; 4],
-    proj: [[f32; 4]; 4],
-    view_position: [f32; 4],
+    pub view: [[f32; 4]; 4],
+    pub proj: [[f32; 4]; 4],
+    pub view_position: [f32; 4],
 }
 
 
@@ -295,6 +289,31 @@ pub fn camera_to_uniform(camera: &Camera, uniform: &mut CameraUniform)
     uniform.view_position = camera.position.to_homogeneous().into();
     uniform.proj = camera.projection.calc_matrix().into();
     uniform.view = camera.calc_matrix().into();
+}
+
+
+impl MaterialUniform 
+{
+    pub fn new() -> Self
+    {
+        Self 
+        {
+            color: [1.0, 1.0, 1.0, 1.0],
+            roughness: 0.0,
+            metallic: 0.0,
+            _padding: 0.0,
+        }
+    }
+    pub fn new_with(color: [f32; 3], roughness: f32, metallic: f32) -> Self
+    {
+        Self 
+        {
+            color : [color[0], color[1], color[2], 1.0],
+            roughness,
+            metallic,
+            _padding: 0.0,
+        }
+    }
 }
 
 /****************************************************************************************
@@ -387,7 +406,7 @@ macro_rules! create_render_pass {
                     occlusion_query_set: None,
         })
     };
-    ($encoder:expr, $view:expr, $z_buffer:expr) => {
+    ($encoder:expr, $view:expr, $z_buffer_view:expr) => {
         $encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Simple Pass"),
             color_attachments: &[Some(
@@ -403,7 +422,7 @@ macro_rules! create_render_pass {
                 }
                 )],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &$z_buffer.view,
+                    view: &$z_buffer_view,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(1.0),
                         store: StoreOp::Store,
